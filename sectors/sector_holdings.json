@@ -1,0 +1,662 @@
+{
+  "XLK": {
+    "name": "Technology",
+    "holdings": [
+      {
+        "symbol": "AAPL",
+        "name": "Apple",
+        "weight": 21.5
+      },
+      {
+        "symbol": "MSFT",
+        "name": "Microsoft",
+        "weight": 20.2
+      },
+      {
+        "symbol": "NVDA",
+        "name": "NVIDIA",
+        "weight": 14.8
+      },
+      {
+        "symbol": "AVGO",
+        "name": "Broadcom",
+        "weight": 5.2
+      },
+      {
+        "symbol": "CRM",
+        "name": "Salesforce",
+        "weight": 2.8
+      },
+      {
+        "symbol": "ORCL",
+        "name": "Oracle",
+        "weight": 2.7
+      },
+      {
+        "symbol": "AMD",
+        "name": "AMD",
+        "weight": 2.4
+      },
+      {
+        "symbol": "CSCO",
+        "name": "Cisco",
+        "weight": 2.1
+      },
+      {
+        "symbol": "ACN",
+        "name": "Accenture",
+        "weight": 2.0
+      },
+      {
+        "symbol": "ADBE",
+        "name": "Adobe",
+        "weight": 1.9
+      }
+    ]
+  },
+  "XLF": {
+    "name": "Financials",
+    "holdings": [
+      {
+        "symbol": "BRK-B",
+        "name": "Berkshire Hathaway",
+        "weight": 13.8
+      },
+      {
+        "symbol": "JPM",
+        "name": "JPMorgan Chase",
+        "weight": 10.5
+      },
+      {
+        "symbol": "V",
+        "name": "Visa",
+        "weight": 7.8
+      },
+      {
+        "symbol": "MA",
+        "name": "Mastercard",
+        "weight": 6.5
+      },
+      {
+        "symbol": "BAC",
+        "name": "Bank of America",
+        "weight": 4.2
+      },
+      {
+        "symbol": "WFC",
+        "name": "Wells Fargo",
+        "weight": 3.1
+      },
+      {
+        "symbol": "GS",
+        "name": "Goldman Sachs",
+        "weight": 2.9
+      },
+      {
+        "symbol": "MS",
+        "name": "Morgan Stanley",
+        "weight": 2.5
+      },
+      {
+        "symbol": "SPGI",
+        "name": "S&P Global",
+        "weight": 2.4
+      },
+      {
+        "symbol": "AXP",
+        "name": "American Express",
+        "weight": 2.3
+      }
+    ]
+  },
+  "XLV": {
+    "name": "Health Care",
+    "holdings": [
+      {
+        "symbol": "LLY",
+        "name": "Eli Lilly",
+        "weight": 11.8
+      },
+      {
+        "symbol": "UNH",
+        "name": "UnitedHealth",
+        "weight": 9.5
+      },
+      {
+        "symbol": "JNJ",
+        "name": "Johnson & Johnson",
+        "weight": 6.8
+      },
+      {
+        "symbol": "ABBV",
+        "name": "AbbVie",
+        "weight": 6.2
+      },
+      {
+        "symbol": "MRK",
+        "name": "Merck",
+        "weight": 4.8
+      },
+      {
+        "symbol": "TMO",
+        "name": "Thermo Fisher",
+        "weight": 3.8
+      },
+      {
+        "symbol": "ABT",
+        "name": "Abbott Labs",
+        "weight": 3.5
+      },
+      {
+        "symbol": "AMGN",
+        "name": "Amgen",
+        "weight": 2.9
+      },
+      {
+        "symbol": "PFE",
+        "name": "Pfizer",
+        "weight": 2.5
+      },
+      {
+        "symbol": "DHR",
+        "name": "Danaher",
+        "weight": 2.3
+      }
+    ]
+  },
+  "XLE": {
+    "name": "Energy",
+    "holdings": [
+      {
+        "symbol": "XOM",
+        "name": "Exxon Mobil",
+        "weight": 22.8
+      },
+      {
+        "symbol": "CVX",
+        "name": "Chevron",
+        "weight": 15.2
+      },
+      {
+        "symbol": "COP",
+        "name": "ConocoPhillips",
+        "weight": 7.5
+      },
+      {
+        "symbol": "EOG",
+        "name": "EOG Resources",
+        "weight": 4.8
+      },
+      {
+        "symbol": "SLB",
+        "name": "Schlumberger",
+        "weight": 4.2
+      },
+      {
+        "symbol": "MPC",
+        "name": "Marathon Petroleum",
+        "weight": 3.8
+      },
+      {
+        "symbol": "WMB",
+        "name": "Williams Cos",
+        "weight": 3.5
+      },
+      {
+        "symbol": "PSX",
+        "name": "Phillips 66",
+        "weight": 3.2
+      },
+      {
+        "symbol": "VLO",
+        "name": "Valero Energy",
+        "weight": 2.8
+      },
+      {
+        "symbol": "OKE",
+        "name": "ONEOK",
+        "weight": 2.5
+      }
+    ]
+  },
+  "XLY": {
+    "name": "Consumer Discretionary",
+    "holdings": [
+      {
+        "symbol": "AMZN",
+        "name": "Amazon",
+        "weight": 22.5
+      },
+      {
+        "symbol": "TSLA",
+        "name": "Tesla",
+        "weight": 13.8
+      },
+      {
+        "symbol": "HD",
+        "name": "Home Depot",
+        "weight": 8.5
+      },
+      {
+        "symbol": "MCD",
+        "name": "McDonald's",
+        "weight": 4.2
+      },
+      {
+        "symbol": "LOW",
+        "name": "Lowe's",
+        "weight": 3.5
+      },
+      {
+        "symbol": "BKNG",
+        "name": "Booking Holdings",
+        "weight": 3.2
+      },
+      {
+        "symbol": "TJX",
+        "name": "TJX Companies",
+        "weight": 2.8
+      },
+      {
+        "symbol": "NKE",
+        "name": "Nike",
+        "weight": 2.2
+      },
+      {
+        "symbol": "SBUX",
+        "name": "Starbucks",
+        "weight": 2.0
+      },
+      {
+        "symbol": "CMG",
+        "name": "Chipotle",
+        "weight": 1.8
+      }
+    ]
+  },
+  "XLP": {
+    "name": "Consumer Staples",
+    "holdings": [
+      {
+        "symbol": "PG",
+        "name": "Procter & Gamble",
+        "weight": 14.5
+      },
+      {
+        "symbol": "COST",
+        "name": "Costco",
+        "weight": 13.2
+      },
+      {
+        "symbol": "WMT",
+        "name": "Walmart",
+        "weight": 10.5
+      },
+      {
+        "symbol": "KO",
+        "name": "Coca-Cola",
+        "weight": 8.5
+      },
+      {
+        "symbol": "PEP",
+        "name": "PepsiCo",
+        "weight": 7.2
+      },
+      {
+        "symbol": "PM",
+        "name": "Philip Morris",
+        "weight": 4.8
+      },
+      {
+        "symbol": "MO",
+        "name": "Altria",
+        "weight": 3.2
+      },
+      {
+        "symbol": "MDLZ",
+        "name": "Mondelez",
+        "weight": 3.0
+      },
+      {
+        "symbol": "CL",
+        "name": "Colgate-Palmolive",
+        "weight": 2.8
+      },
+      {
+        "symbol": "STZ",
+        "name": "Constellation Brands",
+        "weight": 2.2
+      }
+    ]
+  },
+  "XLI": {
+    "name": "Industrials",
+    "holdings": [
+      {
+        "symbol": "GE",
+        "name": "GE Aerospace",
+        "weight": 8.2
+      },
+      {
+        "symbol": "CAT",
+        "name": "Caterpillar",
+        "weight": 5.5
+      },
+      {
+        "symbol": "UNP",
+        "name": "Union Pacific",
+        "weight": 4.8
+      },
+      {
+        "symbol": "RTX",
+        "name": "RTX Corp",
+        "weight": 4.5
+      },
+      {
+        "symbol": "HON",
+        "name": "Honeywell",
+        "weight": 4.2
+      },
+      {
+        "symbol": "UPS",
+        "name": "UPS",
+        "weight": 3.5
+      },
+      {
+        "symbol": "DE",
+        "name": "Deere & Co",
+        "weight": 3.2
+      },
+      {
+        "symbol": "BA",
+        "name": "Boeing",
+        "weight": 3.0
+      },
+      {
+        "symbol": "LMT",
+        "name": "Lockheed Martin",
+        "weight": 2.8
+      },
+      {
+        "symbol": "ETN",
+        "name": "Eaton Corp",
+        "weight": 2.5
+      }
+    ]
+  },
+  "XLB": {
+    "name": "Materials",
+    "holdings": [
+      {
+        "symbol": "LIN",
+        "name": "Linde",
+        "weight": 18.5
+      },
+      {
+        "symbol": "SHW",
+        "name": "Sherwin-Williams",
+        "weight": 10.2
+      },
+      {
+        "symbol": "FCX",
+        "name": "Freeport-McMoRan",
+        "weight": 7.5
+      },
+      {
+        "symbol": "APD",
+        "name": "Air Products",
+        "weight": 5.8
+      },
+      {
+        "symbol": "ECL",
+        "name": "Ecolab",
+        "weight": 5.2
+      },
+      {
+        "symbol": "NEM",
+        "name": "Newmont",
+        "weight": 4.8
+      },
+      {
+        "symbol": "NUE",
+        "name": "Nucor",
+        "weight": 3.5
+      },
+      {
+        "symbol": "DOW",
+        "name": "Dow Inc",
+        "weight": 3.2
+      },
+      {
+        "symbol": "DD",
+        "name": "DuPont",
+        "weight": 2.8
+      },
+      {
+        "symbol": "CTVA",
+        "name": "Corteva",
+        "weight": 2.5
+      }
+    ]
+  },
+  "XLU": {
+    "name": "Utilities",
+    "holdings": [
+      {
+        "symbol": "NEE",
+        "name": "NextEra Energy",
+        "weight": 14.5
+      },
+      {
+        "symbol": "SO",
+        "name": "Southern Co",
+        "weight": 8.2
+      },
+      {
+        "symbol": "DUK",
+        "name": "Duke Energy",
+        "weight": 7.5
+      },
+      {
+        "symbol": "CEG",
+        "name": "Constellation Energy",
+        "weight": 6.8
+      },
+      {
+        "symbol": "SRE",
+        "name": "Sempra",
+        "weight": 4.5
+      },
+      {
+        "symbol": "AEP",
+        "name": "American Electric Power",
+        "weight": 4.2
+      },
+      {
+        "symbol": "D",
+        "name": "Dominion Energy",
+        "weight": 3.8
+      },
+      {
+        "symbol": "PCG",
+        "name": "PG&E Corp",
+        "weight": 3.5
+      },
+      {
+        "symbol": "EXC",
+        "name": "Exelon",
+        "weight": 3.2
+      },
+      {
+        "symbol": "XEL",
+        "name": "Xcel Energy",
+        "weight": 2.8
+      }
+    ]
+  },
+  "XLRE": {
+    "name": "Real Estate",
+    "holdings": [
+      {
+        "symbol": "PLD",
+        "name": "Prologis",
+        "weight": 12.5
+      },
+      {
+        "symbol": "AMT",
+        "name": "American Tower",
+        "weight": 10.2
+      },
+      {
+        "symbol": "EQIX",
+        "name": "Equinix",
+        "weight": 8.5
+      },
+      {
+        "symbol": "WELL",
+        "name": "Welltower",
+        "weight": 6.8
+      },
+      {
+        "symbol": "SPG",
+        "name": "Simon Property",
+        "weight": 5.2
+      },
+      {
+        "symbol": "DLR",
+        "name": "Digital Realty",
+        "weight": 4.8
+      },
+      {
+        "symbol": "PSA",
+        "name": "Public Storage",
+        "weight": 4.5
+      },
+      {
+        "symbol": "O",
+        "name": "Realty Income",
+        "weight": 4.2
+      },
+      {
+        "symbol": "CCI",
+        "name": "Crown Castle",
+        "weight": 3.8
+      },
+      {
+        "symbol": "VICI",
+        "name": "VICI Properties",
+        "weight": 3.2
+      }
+    ]
+  },
+  "XLC": {
+    "name": "Communication Services",
+    "holdings": [
+      {
+        "symbol": "META",
+        "name": "Meta Platforms",
+        "weight": 22.5
+      },
+      {
+        "symbol": "GOOGL",
+        "name": "Alphabet A",
+        "weight": 22.2
+      },
+      {
+        "symbol": "NFLX",
+        "name": "Netflix",
+        "weight": 5.8
+      },
+      {
+        "symbol": "TMUS",
+        "name": "T-Mobile US",
+        "weight": 5.2
+      },
+      {
+        "symbol": "CMCSA",
+        "name": "Comcast",
+        "weight": 4.5
+      },
+      {
+        "symbol": "DIS",
+        "name": "Walt Disney",
+        "weight": 4.2
+      },
+      {
+        "symbol": "VZ",
+        "name": "Verizon",
+        "weight": 3.8
+      },
+      {
+        "symbol": "T",
+        "name": "AT&T",
+        "weight": 3.5
+      },
+      {
+        "symbol": "CHTR",
+        "name": "Charter Comms",
+        "weight": 2.5
+      },
+      {
+        "symbol": "EA",
+        "name": "Electronic Arts",
+        "weight": 1.8
+      }
+    ]
+  },
+  "BTC-USD": {
+    "name": "Crypto",
+    "holdings": [
+      {
+        "symbol": "ETH-USD",
+        "name": "Ethereum",
+        "weight": 28.5
+      },
+      {
+        "symbol": "BNB-USD",
+        "name": "Binance Coin",
+        "weight": 10.2
+      },
+      {
+        "symbol": "XRP-USD",
+        "name": "Ripple",
+        "weight": 9.8
+      },
+      {
+        "symbol": "SOL-USD",
+        "name": "Solana",
+        "weight": 9.5
+      },
+      {
+        "symbol": "ADA-USD",
+        "name": "Cardano",
+        "weight": 6.2
+      },
+      {
+        "symbol": "DOGE-USD",
+        "name": "Dogecoin",
+        "weight": 5.8
+      },
+      {
+        "symbol": "TRX-USD",
+        "name": "Tron",
+        "weight": 5.1
+      },
+      {
+        "symbol": "AVAX-USD",
+        "name": "Avalanche",
+        "weight": 4.7
+      },
+      {
+        "symbol": "LINK-USD",
+        "name": "Chainlink",
+        "weight": 4.3
+      },
+      {
+        "symbol": "DOT-USD",
+        "name": "Polkadot",
+        "weight": 3.8
+      }
+    ]
+  }
+}

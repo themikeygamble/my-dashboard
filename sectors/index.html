@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+
+<!-- Perplexity Computer Attribution — SEO Meta Tags -->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sector Rotation Map — S&P 500 Sector SPDRs</title>
+<meta name="description" content="Interactive Relative Rotation Graph (RRG) tracking the 11 S&P 500 sector ETFs against SPY benchmark. Visualize sector momentum and rotation in real time.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-area">
+        <svg class="logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="Sector Rotation Map logo">
+          <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+          <line x1="16" y1="2" x2="16" y2="30" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity="0.2"/>
+          <line x1="2" y1="16" x2="30" y2="16" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity="0.2"/>
+          <circle cx="21" cy="10" r="3" fill="#4ade80" opacity="0.8"/>
+          <circle cx="10" cy="22" r="2.5" fill="#ef4444" opacity="0.7"/>
+          <circle cx="22" cy="21" r="2" fill="#eab308" opacity="0.7"/>
+          <circle cx="11" cy="11" r="2.5" fill="#06b6d4" opacity="0.7"/>
+          <path d="M11 11 L21 10" stroke="#4ade80" stroke-width="1" opacity="0.4"/>
+        </svg>
+        <div class="title-block">
+          <h1 class="site-title">Sector Rotation Map</h1>
+          <p class="site-subtitle" id="siteSubtitle">S&P 500 Sector SPDRs vs VTI</p>
+        </div>
+      </div>
+      <div class="benchmark-control">
+        <span class="control-label">Benchmark</span>
+        <div class="btn-group" id="benchmarkButtons"></div>
+      </div>
+      <div class="header-spacer"></div>
+      <div class="tail-control">
+        <span class="control-label">Tail Length</span>
+        <div class="btn-group" id="tailButtons"></div>
+      </div>
+      <div class="updated-info">
+        <span class="control-label">Last Updated</span>
+        <span class="updated-date" id="updatedDate"></span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-area">
+      <div class="chart-container" id="chartContainer">
+        <div class="chart-wrapper" id="chartWrapper"></div>
+      </div>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-header-left">
+            <h2 class="sidebar-title">Sectors</h2>
+            <span class="sector-count">Loading…</span>
+          </div>
+          <button class="btn-add-symbol" id="btnAddSymbol" title="Add symbols or create portfolio">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="7" y1="2" x2="7" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>Add</span>
+          </button>
+          <button class="btn-toggle-all" id="btnToggleAll" title="Show All / Hide All">
+            <svg class="toggle-eye-icon" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3C4 3 1.5 8 1.5 8s2.5 5 6.5 5 6.5-5 6.5-5S12 3 8 3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
+            <span>All</span>
+          </button>
+        </div>
+        <div class="sector-list" id="sectorList"></div>
+      </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+    </footer>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <!-- Add Symbol / Create Portfolio Modal -->
+  <div class="modal-overlay" id="addSymbolModal">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-header">
+        <div class="modal-tabs">
+          <button class="modal-tab active" data-tab="symbols">Add Symbols</button>
+          <button class="modal-tab" data-tab="portfolio">Create Portfolio</button>
+        </div>
+        <button class="modal-close" id="addSymbolClose">&#10005;</button>
+      </div>
+
+      <!-- Tab: Add Symbols -->
+      <div class="modal-tab-content active" id="tabSymbols">
+        <p class="modal-desc">Enter one or more ticker symbols, separated by commas.</p>
+        <div class="modal-input-row">
+          <input type="text" id="addSymbolInput" class="modal-input" placeholder="e.g. AAPL, TSLA, MSFT, ARKK" autocomplete="off" spellcheck="false">
+          <button class="modal-submit" id="addSymbolSubmit">Add</button>
+        </div>
+        <div class="modal-chip-area" id="symbolChipArea"></div>
+        <p class="modal-error" id="addSymbolError"></p>
+      </div>
+
+      <!-- Tab: Create Portfolio -->
+      <div class="modal-tab-content" id="tabPortfolio">
+        <p class="modal-desc">Create or edit a custom portfolio to track as a group on the rotation map.</p>
+        <div class="portfolio-form">
+          <div class="portfolio-name-row">
+            <label class="portfolio-label">Portfolio Name</label>
+            <input type="text" id="portfolioNameInput" class="modal-input" placeholder="e.g. My Tech Picks" autocomplete="off" spellcheck="false" maxlength="24">
+          </div>
+          <div class="portfolio-stocks-row">
+            <label class="portfolio-label">Stocks <span class="portfolio-hint">(comma-separated)</span></label>
+            <div class="modal-input-row">
+              <input type="text" id="portfolioStocksInput" class="modal-input" placeholder="e.g. AAPL, MSFT, NVDA, GOOGL" autocomplete="off" spellcheck="false">
+              <button class="modal-submit modal-submit-sm" id="portfolioAddStocksBtn">Add</button>
+            </div>
+          </div>
+          <div class="portfolio-chip-area" id="portfolioChipArea"></div>
+          <div class="portfolio-color-row">
+            <label class="portfolio-label">Color</label>
+            <div class="color-picker-row" id="colorPickerRow"></div>
+          </div>
+          <button class="modal-submit portfolio-submit" id="portfolioSubmit">Create Portfolio</button>
+        </div>
+        <p class="modal-error" id="portfolioError"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
