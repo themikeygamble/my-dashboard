@@ -367,7 +367,7 @@ def validate_symbol(req: ValidateRequest):
         raise HTTPException(status_code=422, detail="Empty symbol")
     try:
         info = yf.Ticker(sym)
-        hist = info.history(period="5d")
+        hist = info.history(period="1mo")
         if hist.empty:
             raise HTTPException(status_code=404, detail=f"No data found for {sym}")
         name = getattr(info, 'info', {}).get('shortName', sym)
