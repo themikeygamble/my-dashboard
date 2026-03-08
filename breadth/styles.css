@@ -25,11 +25,17 @@ header {
   border-bottom: 1px solid #30363d;
 }
 
-.site-name {
+.site-name-link {
   font-size: 16px;
   font-weight: 700;
   color: #e6edf3;
   margin-right: 16px;
+  text-decoration: none;
+}
+
+.site-name-link:hover {
+  color: #e6edf3;
+  text-decoration: none;
 }
 
 nav {
