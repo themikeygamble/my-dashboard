@@ -40,7 +40,7 @@ html, body {
 .dashboard {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  height: 100dvh;
+  height: calc(100dvh - 49px);
   min-height: 0;
 }
 
