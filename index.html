@@ -1,35 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>themikeygamble</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0d1117; color: #e6edf3; font-family: sans-serif; }
-    header { display: flex; align-items: center; gap: 16px; padding: 12px 24px;
-             background: #161b22; border-bottom: 1px solid #30363d; }
-    .site-name { font-size: 16px; font-weight: 700; color: #e6edf3; margin-right: 16px; }
-    nav { display: flex; gap: 8px; }
-    nav a { color: #8b949e; text-decoration: none; font-size: 14px;
-            padding: 7px 16px; border-radius: 6px; border: 1px solid transparent; }
-    nav a:hover { color: #e6edf3; border-color: #30363d; background: #21262d; }
-    nav a.active { color: #e6edf3; background: #21262d; border-color: #30363d; }
+    nav {
+      display: flex;
+      gap: 12px;
+      padding: 20px 32px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-wrap: wrap;
+    }
+    nav a {
+      color: #58a6ff;
+      text-decoration: none;
+      font-size: 15px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+    }
+    nav a:hover { background: #21262d; }
     .hero { padding: 80px 40px; }
-    h1 { font-size: 2rem; margin-bottom: 12px; }
+    h1 { font-size: 2.2rem; margin-bottom: 12px; }
     p { color: #8b949e; }
   </style>
 </head>
 <body>
-  <header>
-    <span class="site-name">themikeygamble</span>
-    <nav>
-      <a href="." class="active">🏠 Home</a>
-      <a href="sectors/">📊 Sector Rotation</a>
-    </nav>
-  </header>
+  <nav>
+    <a href="sectors/">📊 Sector Rotation</a>
+    <a href="breadth/">📈 Nasdaq Breadth</a>
+  </nav>
+
   <div class="hero">
-    <h1>Welcome</h1>
-    <p>Select a tool from the menu above.</p>
+    <h1>themikeygamble</h1>
+    <p>Select a tool above.</p>
   </div>
 </body>
 </html>
