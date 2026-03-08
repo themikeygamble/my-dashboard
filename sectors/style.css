@@ -36,6 +36,56 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ===== TOP SITE HEADER ===== */
+.top-site-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.site-name-link {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e6edf3;
+  margin-right: 16px;
+  text-decoration: none;
+}
+
+.site-name-link:hover {
+  color: #e6edf3;
+  text-decoration: none;
+}
+
+.top-site-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.top-site-nav a {
+  color: #8b949e;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.top-site-nav a:hover {
+  color: #e6edf3;
+  border-color: #30363d;
+  background: #21262d;
+}
+
+.top-site-nav a.active {
+  color: #e6edf3;
+  background: #21262d;
+  border-color: #30363d;
+}
+
 /* ===== DASHBOARD GRID ===== */
 .dashboard {
   display: grid;
@@ -973,7 +1023,7 @@ html, body {
   font-weight: 500;
 }
 
-/* ===== EXPAND ICON (redesigned — bigger, brighter, chevron SVG) ===== */
+/* ===== EXPAND ICON ===== */
 .expand-icon {
   display: inline-flex;
   align-items: center;
