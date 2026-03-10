@@ -43,7 +43,6 @@ body {
   line-height: 1.45;
 }
 
-/* top nav */
 header {
   display: flex;
   align-items: center;
@@ -93,7 +92,6 @@ nav a.active {
   border-color: #30363d;
 }
 
-/* page */
 .page {
   width: 100%;
   max-width: none;
@@ -152,7 +150,6 @@ nav a.active {
   color: var(--text);
 }
 
-/* year tabs */
 .year-toolbar {
   display: flex;
   align-items: center;
@@ -197,7 +194,6 @@ nav a.active {
   border-color: #35507a;
 }
 
-/* card + table */
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -298,7 +294,6 @@ tbody td:first-child {
   color: var(--text);
 }
 
-/* metrics + buttons */
 .metric-pill,
 .cell-btn {
   display: inline-flex;
@@ -376,7 +371,6 @@ tbody td:first-child {
   border-color: #f85149;
 }
 
-/* modal */
 .modal {
   position: fixed;
   inset: 0;
@@ -468,7 +462,6 @@ tbody td:first-child {
   margin-bottom: 14px;
 }
 
-/* leaderboard modal list */
 .ticker-grid {
   display: flex;
   flex-direction: column;
@@ -531,7 +524,6 @@ tbody td:first-child {
   font-variant-numeric: tabular-nums;
 }
 
-/* responsive */
 @media (max-width: 900px) {
   .page {
     padding: 16px;
