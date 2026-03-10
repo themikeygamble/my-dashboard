@@ -201,7 +201,79 @@ function getRatioClass(value) {
   return "bear-dominant";
 }
 
-function openModal(date, label, symbols) {
+function normalizeListItems(items) {
+  return (items || []).map(item => {
+    if (typeof item === "string") {
+      return {
+        symbol: item,
+        percent: null
+      };
+    }
+
+    const rawPercent =
+      item.percent ??
+      item.pct ??
+      item.pct_change ??
+      item.pctChange ??
+      item.changePercent ??
+      item.percentage ??
+      item.value;
+
+    let percent = null;
+
+    if (typeof rawPercent === "number" && Number.isFinite(rawPercent)) {
+      percent = rawPercent;
+    } else if (typeof rawPercent === "string") {
+      const cleaned = rawPercent.replace("%", "").replace("+", "").trim();
+      const parsed = Number(cleaned);
+      percent = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return {
+      symbol: item.symbol || item.ticker || item.name || "N/A",
+      percent
+    };
+  });
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function sortLeaderboardItems(items) {
+  return [...items].sort((a, b) => {
+    const aPct = Number.isFinite(a.percent) ? a.percent : -Infinity;
+    const bPct = Number.isFinite(b.percent) ? b.percent : -Infinity;
+    return bPct - aPct;
+  });
+}
+
+function renderLeaderboard(grid, items) {
+  grid.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "leaderboard-head";
+  head.innerHTML = `
+    <span class="leader-rank">#</span>
+    <span class="leader-symbol">Ticker</span>
+    <span class="leader-percent">% Change</span>
+  `;
+  grid.appendChild(head);
+
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "leaderboard-row";
+    row.innerHTML = `
+      <span class="leader-rank">${index + 1}</span>
+      <span class="leader-symbol">${item.symbol}</span>
+      <span class="leader-percent">${formatPercent(item.percent)}</span>
+    `;
+    grid.appendChild(row);
+  });
+}
+
+function openModal(date, label, rawItems) {
   const modal = document.getElementById("modal");
   const title = document.getElementById("modalTitle");
   const meta = document.getElementById("modalMeta");
@@ -212,30 +284,28 @@ function openModal(date, label, symbols) {
 
   title.textContent = label;
   meta.textContent = date;
-  count.textContent = `${symbols.length.toLocaleString()} symbols`;
   input.value = "";
 
-  const renderSymbols = (items) => {
-    grid.innerHTML = "";
-    items.forEach(symbol => {
-      const div = document.createElement("div");
-      div.className = "ticker-pill";
-      div.textContent = symbol;
-      grid.appendChild(div);
-    });
+  const baseItems = normalizeListItems(rawItems);
+
+  const refresh = (itemsToRender) => {
+    const sorted = sortLeaderboardItems(itemsToRender);
+    count.textContent = `${sorted.length.toLocaleString()} symbols`;
+    renderLeaderboard(grid, sorted);
   };
 
-  renderSymbols(symbols);
+  refresh(baseItems);
 
   input.oninput = () => {
     const q = input.value.trim().toUpperCase();
-    const filtered = !q ? symbols : symbols.filter(s => s.includes(q));
-    count.textContent = `${filtered.length.toLocaleString()} symbols`;
-    renderSymbols(filtered);
+    const filtered = !q
+      ? baseItems
+      : baseItems.filter(item => item.symbol.toUpperCase().includes(q));
+    refresh(filtered);
   };
 
   copyBtn.onclick = async () => {
-    await navigator.clipboard.writeText(symbols.join(", "));
+    await navigator.clipboard.writeText(baseItems.map(item => item.symbol).join(", "));
     copyBtn.textContent = "Copied";
     setTimeout(() => {
       copyBtn.textContent = "Copy list";
