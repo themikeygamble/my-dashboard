@@ -95,9 +95,10 @@ nav a.active {
 
 /* page */
 .page {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 20px 18px;
 }
 
 .topbar {
@@ -208,13 +209,14 @@ nav a.active {
 .table-wrap {
   overflow: auto;
   max-height: calc(100vh - 240px);
+  width: 100%;
 }
 
 table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 1350px;
+  min-width: 1400px;
 }
 
 thead th {
@@ -533,5 +535,6 @@ tbody td:first-child {
     grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   }
 }
+
 
 
