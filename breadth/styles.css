@@ -95,8 +95,8 @@ nav a.active {
 
 /* page */
 .page {
-  max-width: none;
   width: 100%;
+  max-width: none;
   margin: 0;
   padding: 20px 18px;
 }
@@ -208,21 +208,19 @@ nav a.active {
 
 .table-wrap {
   overflow: auto;
-  max-height: calc(100vh - 240px);
   width: 100%;
+  max-height: calc(100vh - 240px);
 }
 
 table {
   width: 100%;
+  min-width: 1450px;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 1400px;
 }
 
 thead th {
   position: sticky;
-  top: 0;
-  z-index: 4;
   background: var(--panel-2);
   color: var(--muted);
   font-size: 12px;
@@ -233,39 +231,30 @@ thead th {
   border-bottom: 1px solid var(--border);
   text-align: center;
   white-space: nowrap;
+  z-index: 4;
+}
+
+thead tr:first-child th {
+  top: 0;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+thead tr:nth-child(2) th {
+  top: 45px;
 }
 
 thead .group-header {
-  text-align: center;
   background: #0f1722;
   color: #c9d1d9;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
 }
 
-thead tr:first-child th {
-  padding-top: 14px;
-  padding-bottom: 14px;
-}
-
-thead tr:nth-child(2) th {
-  top: 46px;
-}
-
-/* divider between Primary and Secondary sections */
-thead tr:first-child th.group-header:first-of-type {
+thead .group-header-primary {
   border-right: 2px solid #35507a;
-}
-
-thead tr:nth-child(2) th:nth-child(6) {
-  border-right: 2px solid #35507a;
-}
-
-tbody td:nth-child(8) {
-  border-right: 2px solid #24354d;
 }
 
 tbody td {
@@ -284,10 +273,10 @@ thead th:first-child,
 tbody td:first-child {
   position: sticky;
   left: 0;
-  z-index: 3;
   background: #101723;
   text-align: left;
   min-width: 120px;
+  z-index: 3;
 }
 
 thead th:first-child {
