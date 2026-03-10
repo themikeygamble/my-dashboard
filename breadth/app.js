@@ -241,8 +241,15 @@ function formatPercent(value) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
+function getMagnitude(value) {
+  return Number.isFinite(value) ? Math.abs(value) : -Infinity;
+}
+
 function sortLeaderboardItems(items) {
   return [...items].sort((a, b) => {
+    const magDiff = getMagnitude(b.percent) - getMagnitude(a.percent);
+    if (magDiff !== 0) return magDiff;
+
     const aPct = Number.isFinite(a.percent) ? a.percent : -Infinity;
     const bPct = Number.isFinite(b.percent) ? b.percent : -Infinity;
     return bPct - aPct;
