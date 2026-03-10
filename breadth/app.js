@@ -23,19 +23,74 @@ const PAIRS = [
 ];
 
 let breadthData = [];
+let selectedYear = "2026";
 
 async function loadData() {
   const res = await fetch("../data/breadth-history.json", { cache: "no-store" });
   const json = await res.json();
   breadthData = json.rows || [];
 
-  if (!breadthData.length) return;
+  if (!breadthData.length) {
+    renderYearTabs([]);
+    renderTable([]);
+    document.getElementById("nasdaqPrice").textContent = "--";
+    document.getElementById("lastUpdated").textContent = "--";
+    document.getElementById("subhead").textContent = "Interactive market monitor";
+    return;
+  }
 
-  const latest = breadthData[0];
+  renderYearTabs(breadthData);
+
+  const availableYears = getAvailableYears(breadthData);
+  if (!availableYears.includes(selectedYear)) {
+    selectedYear = availableYears[0];
+  }
+
+  renderYearTabs(breadthData);
+  renderSelectedYear();
+}
+
+function getAvailableYears(rows) {
+  return [...new Set(rows.map(r => String(r.date).slice(0, 4)))]
+    .sort((a, b) => Number(b) - Number(a));
+}
+
+function renderYearTabs(rows) {
+  const years = getAvailableYears(rows);
+  const wrap = document.getElementById("yearTabs");
+  wrap.innerHTML = "";
+
+  years.forEach(year => {
+    const btn = document.createElement("button");
+    btn.className = `year-btn ${year === selectedYear ? "active" : ""}`;
+    btn.textContent = year;
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      selectedYear = year;
+      renderYearTabs(breadthData);
+      renderSelectedYear();
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+function renderSelectedYear() {
+  const filtered = breadthData.filter(row => String(row.date).startsWith(selectedYear));
+
+  if (!filtered.length) {
+    document.getElementById("nasdaqPrice").textContent = "--";
+    document.getElementById("lastUpdated").textContent = "--";
+    document.getElementById("subhead").textContent = `Interactive market monitor • ${selectedYear}`;
+    renderTable([]);
+    return;
+  }
+
+  const latest = filtered[0];
   document.getElementById("nasdaqPrice").textContent = formatNumber(latest.nasdaq_close);
   document.getElementById("lastUpdated").textContent = latest.date;
+  document.getElementById("subhead").textContent = `Interactive market monitor • ${selectedYear}`;
 
-  renderTable(breadthData);
+  renderTable(filtered);
 }
 
 function renderTable(rows) {
