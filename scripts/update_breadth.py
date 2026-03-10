@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import time
 from datetime import datetime, timezone
 
@@ -8,20 +9,17 @@ import requests
 import yfinance as yf
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
-YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 OUTPUT_PATH = "data/breadth-history.json"
 
 LOOKBACK_PERIOD = "18mo"
 MAX_HISTORY_ROWS = 1500
 PRICE_BATCH_SIZE = 120
-MCAP_BATCH_SIZE = 200
 REQUEST_SLEEP = 0.35
-MIN_MARKET_CAP = 100_000_000
 
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json,text/plain,*/*"
+    "Accept": "text/plain,application/json,*/*"
 })
 
 
@@ -45,7 +43,7 @@ def download_nasdaq_universe():
 
     bad_chars = ["^", "$", "/"]
     for ch in bad_chars:
-        df = df[~df["Symbol"].str.contains("\\\\" + ch, regex=True, na=False)]
+        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)]
 
     symbols = df["Symbol"].dropna().unique().tolist()
     symbols.sort()
@@ -59,54 +57,6 @@ def to_yf_symbol(symbol):
 def chunked(items, size):
     for i in range(0, len(items), size):
         yield items[i:i + size]
-
-
-def filter_by_market_cap(symbols, min_market_cap=MIN_MARKET_CAP):
-    kept = []
-
-    for batch in chunked(symbols, MCAP_BATCH_SIZE):
-        raw_to_yf = {s: to_yf_symbol(s) for s in batch}
-        yf_to_raw = {v.upper(): k for k, v in raw_to_yf.items()}
-
-        params = {
-            "symbols": ",".join(raw_to_yf.values()),
-            "lang": "en-US",
-            "region": "US"
-        }
-
-        try:
-            r = SESSION.get(YAHOO_QUOTE_URL, params=params, timeout=60)
-            r.raise_for_status()
-            results = r.json().get("quoteResponse", {}).get("result", [])
-        except Exception as e:
-            print(f"Market cap batch failed ({batch[:3]}...): {e}")
-            time.sleep(REQUEST_SLEEP)
-            continue
-
-        for item in results:
-            yahoo_symbol = str(item.get("symbol", "")).upper()
-            raw_symbol = yf_to_raw.get(yahoo_symbol)
-            if not raw_symbol:
-                continue
-
-            quote_type = item.get("quoteType")
-            market_cap = item.get("marketCap")
-
-            try:
-                market_cap = float(market_cap)
-            except Exception:
-                continue
-
-            if quote_type not in (None, "EQUITY"):
-                continue
-
-            if market_cap >= min_market_cap:
-                kept.append(raw_symbol)
-
-        time.sleep(REQUEST_SLEEP)
-
-    kept = sorted(set(kept))
-    return kept
 
 
 def extract_batch_history(batch_symbols):
@@ -132,12 +82,12 @@ def extract_batch_history(batch_symbols):
 
     if isinstance(data.columns, pd.MultiIndex):
         available = set(data.columns.get_level_values(0))
+
         for yf_symbol in yf_symbols:
             if yf_symbol not in available:
                 continue
 
             sub = data[yf_symbol].copy().reset_index()
-
             if "Date" not in sub.columns:
                 continue
 
@@ -264,12 +214,6 @@ def safe_ratio(up_count, down_count):
     return up_count / down_count
 
 
-def pct_to_json_value(value):
-    if value is None or pd.isna(value):
-        return None
-    return round(float(value) * 100, 2)
-
-
 def build_ranked_list(day_df, flag_col, ret_col):
     subset = day_df.loc[day_df[flag_col] == True, ["symbol", ret_col]].copy()
 
@@ -277,25 +221,24 @@ def build_ranked_list(day_df, flag_col, ret_col):
         return []
 
     subset = subset.rename(columns={ret_col: "percent"})
+    subset["symbol"] = subset["symbol"].astype(str)
     subset["percent"] = pd.to_numeric(subset["percent"], errors="coerce")
     subset = subset.dropna(subset=["symbol", "percent"]).copy()
-    subset["percent"] = subset["percent"] * 100
 
-    subset = (
-        subset.sort_values(
-            by=["percent", "symbol"],
-            key=lambda s: s.abs() if s.name == "percent" else s,
-            ascending=[False, True]
-        )
-        .drop_duplicates(subset=["symbol"], keep="first")
-    )
+    subset["percent"] = subset["percent"] * 100
+    subset["abs_percent"] = subset["percent"].abs()
+
+    subset = subset.sort_values(
+        by=["abs_percent", "percent", "symbol"],
+        ascending=[False, False, True]
+    ).drop_duplicates(subset=["symbol"], keep="first")
 
     return [
         {
-            "symbol": str(symbol),
-            "percent": round(float(percent), 2)
+            "symbol": str(row.symbol),
+            "percent": round(float(row.percent), 2)
         }
-        for symbol, percent in zip(subset["symbol"], subset["percent"])
+        for row in subset.itertuples(index=False)
     ]
 
 
@@ -398,11 +341,7 @@ def build_rows(stock_df, ixic_df):
 def main():
     print("Downloading Nasdaq universe...")
     symbols = download_nasdaq_universe()
-    print(f"Universe size before market cap filter: {len(symbols)}")
-
-    print("Filtering to market cap >= $100M...")
-    symbols = filter_by_market_cap(symbols, MIN_MARKET_CAP)
-    print(f"Universe size after market cap filter: {len(symbols)}")
+    print(f"Universe size: {len(symbols)}")
 
     print("Downloading stock histories...")
     stock_df = download_all_histories(symbols)
@@ -416,6 +355,8 @@ def main():
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "rows": rows
     }
+
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
