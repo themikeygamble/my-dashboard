@@ -213,10 +213,11 @@ nav a.active {
 }
 
 table {
-  width: 100%;
-  min-width: 1450px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: auto;
 }
 
 thead th {
@@ -227,7 +228,7 @@ thead th {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 12px 10px;
+  padding: 12px 12px;
   border-bottom: 1px solid var(--border);
   text-align: center;
   white-space: nowrap;
@@ -253,16 +254,25 @@ thead .group-header {
   text-transform: uppercase;
 }
 
-thead .group-header-primary {
-  border-right: 2px solid #35507a;
+thead .group-header + .group-header {
+  border-left: 1px solid var(--border);
+}
+
+thead tr:nth-child(2) th:nth-child(7) {
+  border-left: 1px solid var(--border);
 }
 
 tbody td {
-  padding: 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(48, 54, 61, 0.6);
   text-align: center;
   vertical-align: middle;
   background: var(--panel);
+  white-space: nowrap;
+}
+
+tbody td:nth-child(9) {
+  border-left: 1px solid var(--border);
 }
 
 tbody tr:hover td {
@@ -291,20 +301,19 @@ tbody td:first-child {
 /* metrics + buttons */
 .metric-pill,
 .cell-btn {
-  width: 100%;
-  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
   border-radius: 10px;
-  padding: 10px 8px;
+  padding: 10px 12px;
   font-weight: 700;
   font-size: 13px;
   border: 1px solid transparent;
   text-align: center;
-}
-
-.metric-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  white-space: nowrap;
 }
 
 .cell-btn {
