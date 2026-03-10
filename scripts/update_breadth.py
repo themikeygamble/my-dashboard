@@ -167,13 +167,29 @@ def download_nasdaq_composite():
     if data is None or data.empty:
         return pd.DataFrame(columns=["date", "nasdaq_close"])
 
-    data = data.reset_index()
-    data = data.rename(columns={"Date": "date", "Close": "nasdaq_close"})
-    data["date"] = pd.to_datetime(data["date"]).dt.tz_localize(None)
-    data["nasdaq_close"] = pd.to_numeric(data["nasdaq_close"], errors="coerce")
-    data = data.dropna(subset=["date", "nasdaq_close"]).copy()
-    return data[["date", "nasdaq_close"]]
+    if isinstance(data.columns, pd.MultiIndex):
+        if ("Close" in data.columns.get_level_values(-1)):
+            close = data.xs("Close", axis=1, level=-1)
+        else:
+            return pd.DataFrame(columns=["date", "nasdaq_close"])
 
+        if isinstance(close, pd.DataFrame):
+            close = close.iloc[:, 0]
+
+        out = close.reset_index()
+        out.columns = ["date", "nasdaq_close"]
+    else:
+        if "Close" not in data.columns:
+            return pd.DataFrame(columns=["date", "nasdaq_close"])
+
+        out = data[["Close"]].reset_index()
+        out.columns = ["date", "nasdaq_close"]
+
+    out["date"] = pd.to_datetime(out["date"]).dt.tz_localize(None)
+    out["nasdaq_close"] = pd.to_numeric(out["nasdaq_close"], errors="coerce")
+    out = out.dropna(subset=["date", "nasdaq_close"]).copy()
+
+    return out
 
 def ratio_to_json_value(value):
     if value is None:
@@ -318,3 +334,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
