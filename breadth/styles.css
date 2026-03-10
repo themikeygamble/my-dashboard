@@ -235,7 +235,6 @@ thead th {
   white-space: nowrap;
 }
 
-/* ADD THIS RIGHT UNDER THEAD TH */
 thead .group-header {
   text-align: center;
   background: #0f1722;
@@ -255,6 +254,7 @@ thead tr:first-child th {
 thead tr:nth-child(2) th {
   top: 46px;
 }
+
 /* divider between Primary and Secondary sections */
 thead tr:first-child th.group-header:first-of-type {
   border-right: 2px solid #35507a;
@@ -291,7 +291,7 @@ tbody td:first-child {
 }
 
 thead th:first-child {
-  z-index: 5;
+  z-index: 6;
 }
 
 tbody td:first-child {
@@ -303,7 +303,7 @@ tbody td:first-child {
 .metric-pill,
 .cell-btn {
   width: 100%;
-  min-width: 86px;
+  min-width: 96px;
   border-radius: 10px;
   padding: 10px 8px;
   font-weight: 700;
@@ -535,6 +535,3 @@ tbody td:first-child {
     grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   }
 }
-
-
-
