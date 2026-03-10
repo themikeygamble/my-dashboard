@@ -45,7 +45,7 @@ def download_nasdaq_universe():
 
     bad_chars = ["^", "$", "/"]
     for ch in bad_chars:
-        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)]
+        df = df[~df["Symbol"].str.contains("\\\\" + ch, regex=True, na=False)]
 
     symbols = df["Symbol"].dropna().unique().tolist()
     symbols.sort()
@@ -264,6 +264,41 @@ def safe_ratio(up_count, down_count):
     return up_count / down_count
 
 
+def pct_to_json_value(value):
+    if value is None or pd.isna(value):
+        return None
+    return round(float(value) * 100, 2)
+
+
+def build_ranked_list(day_df, flag_col, ret_col):
+    subset = day_df.loc[day_df[flag_col] == True, ["symbol", ret_col]].copy()
+
+    if subset.empty:
+        return []
+
+    subset = subset.rename(columns={ret_col: "percent"})
+    subset["percent"] = pd.to_numeric(subset["percent"], errors="coerce")
+    subset = subset.dropna(subset=["symbol", "percent"]).copy()
+    subset["percent"] = subset["percent"] * 100
+
+    subset = (
+        subset.sort_values(
+            by=["percent", "symbol"],
+            key=lambda s: s.abs() if s.name == "percent" else s,
+            ascending=[False, True]
+        )
+        .drop_duplicates(subset=["symbol"], keep="first")
+    )
+
+    return [
+        {
+            "symbol": str(symbol),
+            "percent": round(float(percent), 2)
+        }
+        for symbol, percent in zip(subset["symbol"], subset["percent"])
+    ]
+
+
 def build_rows(stock_df, ixic_df):
     df = stock_df.copy()
     if df.empty:
@@ -321,19 +356,6 @@ def build_rows(stock_df, ixic_df):
     if not ixic_df.empty:
         ixic_map = dict(zip(ixic_df["date"], ixic_df["nasdaq_close"]))
 
-    indicator_keys = [
-        "up4_today",
-        "down4_today",
-        "up25_quarter",
-        "down25_quarter",
-        "up25_month",
-        "down25_month",
-        "up50_month",
-        "down50_month",
-        "up13_34d",
-        "down13_34d",
-    ]
-
     unique_dates = sorted(df["date"].dropna().unique())
     if len(unique_dates) > MAX_HISTORY_ROWS:
         unique_dates = unique_dates[-MAX_HISTORY_ROWS:]
@@ -343,9 +365,18 @@ def build_rows(stock_df, ixic_df):
     for dt in unique_dates:
         day = df[df["date"] == dt].copy()
 
-        lists = {}
-        for key in indicator_keys:
-            lists[key] = sorted(day.loc[day[key] == True, "symbol"].astype(str).unique().tolist())
+        lists = {
+            "up4_today": build_ranked_list(day, "up4_today", "ret_1d"),
+            "down4_today": build_ranked_list(day, "down4_today", "ret_1d"),
+            "up25_quarter": build_ranked_list(day, "up25_quarter", "ret_63d"),
+            "down25_quarter": build_ranked_list(day, "down25_quarter", "ret_63d"),
+            "up25_month": build_ranked_list(day, "up25_month", "ret_21d"),
+            "down25_month": build_ranked_list(day, "down25_month", "ret_21d"),
+            "up50_month": build_ranked_list(day, "up50_month", "ret_21d"),
+            "down50_month": build_ranked_list(day, "down50_month", "ret_21d"),
+            "up13_34d": build_ranked_list(day, "up13_34d", "ret_34d"),
+            "down13_34d": build_ranked_list(day, "down13_34d", "ret_34d"),
+        }
 
         ratio_5d = daily_counts.at[dt, "ratio_5d"] if dt in daily_counts.index else None
         ratio_10d = daily_counts.at[dt, "ratio_10d"] if dt in daily_counts.index else None
