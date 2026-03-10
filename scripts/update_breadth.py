@@ -2,23 +2,31 @@ import json
 import math
 import time
 from datetime import datetime, timezone
-from io import StringIO
 
 import pandas as pd
 import requests
 import yfinance as yf
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
+YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 OUTPUT_PATH = "data/breadth-history.json"
 
 LOOKBACK_PERIOD = "18mo"
-MAX_HISTORY_ROWS = 180
-BATCH_SIZE = 120
-REQUEST_SLEEP = 0.4
+MAX_HISTORY_ROWS = 1500
+PRICE_BATCH_SIZE = 120
+MCAP_BATCH_SIZE = 200
+REQUEST_SLEEP = 0.35
+MIN_MARKET_CAP = 100_000_000
+
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json,text/plain,*/*"
+})
 
 
 def download_nasdaq_universe():
-    r = requests.get(NASDAQ_LISTED_URL, timeout=60)
+    r = SESSION.get(NASDAQ_LISTED_URL, timeout=60)
     r.raise_for_status()
 
     lines = r.text.strip().splitlines()
@@ -53,6 +61,54 @@ def chunked(items, size):
         yield items[i:i + size]
 
 
+def filter_by_market_cap(symbols, min_market_cap=MIN_MARKET_CAP):
+    kept = []
+
+    for batch in chunked(symbols, MCAP_BATCH_SIZE):
+        raw_to_yf = {s: to_yf_symbol(s) for s in batch}
+        yf_to_raw = {v.upper(): k for k, v in raw_to_yf.items()}
+
+        params = {
+            "symbols": ",".join(raw_to_yf.values()),
+            "lang": "en-US",
+            "region": "US"
+        }
+
+        try:
+            r = SESSION.get(YAHOO_QUOTE_URL, params=params, timeout=60)
+            r.raise_for_status()
+            results = r.json().get("quoteResponse", {}).get("result", [])
+        except Exception as e:
+            print(f"Market cap batch failed ({batch[:3]}...): {e}")
+            time.sleep(REQUEST_SLEEP)
+            continue
+
+        for item in results:
+            yahoo_symbol = str(item.get("symbol", "")).upper()
+            raw_symbol = yf_to_raw.get(yahoo_symbol)
+            if not raw_symbol:
+                continue
+
+            quote_type = item.get("quoteType")
+            market_cap = item.get("marketCap")
+
+            try:
+                market_cap = float(market_cap)
+            except Exception:
+                continue
+
+            if quote_type not in (None, "EQUITY"):
+                continue
+
+            if market_cap >= min_market_cap:
+                kept.append(raw_symbol)
+
+        time.sleep(REQUEST_SLEEP)
+
+    kept = sorted(set(kept))
+    return kept
+
+
 def extract_batch_history(batch_symbols):
     yf_symbols = [to_yf_symbol(s) for s in batch_symbols]
     raw_to_yf = dict(zip(batch_symbols, yf_symbols))
@@ -80,18 +136,16 @@ def extract_batch_history(batch_symbols):
             if yf_symbol not in available:
                 continue
 
-            sub = data[yf_symbol].copy()
-            sub = sub.reset_index()
+            sub = data[yf_symbol].copy().reset_index()
 
             if "Date" not in sub.columns:
                 continue
 
-            rename_map = {
+            sub = sub.rename(columns={
                 "Date": "date",
                 "Close": "close",
                 "Adj Close": "adj_close"
-            }
-            sub = sub.rename(columns=rename_map)
+            })
 
             keep_cols = [c for c in ["date", "close", "adj_close"] if c in sub.columns]
             sub = sub[keep_cols].copy()
@@ -104,13 +158,11 @@ def extract_batch_history(batch_symbols):
             sub["symbol"] = yf_to_raw[yf_symbol]
             frames.append(sub)
     else:
-        sub = data.reset_index()
-        rename_map = {
+        sub = data.reset_index().rename(columns={
             "Date": "date",
             "Close": "close",
             "Adj Close": "adj_close"
-        }
-        sub = sub.rename(columns=rename_map)
+        })
 
         keep_cols = [c for c in ["date", "close", "adj_close"] if c in sub.columns]
         sub = sub[keep_cols].copy()
@@ -136,13 +188,13 @@ def extract_batch_history(batch_symbols):
 def download_all_histories(symbols):
     frames = []
 
-    for batch in chunked(symbols, BATCH_SIZE):
+    for batch in chunked(symbols, PRICE_BATCH_SIZE):
         try:
             batch_df = extract_batch_history(batch)
             if not batch_df.empty:
                 frames.append(batch_df)
         except Exception as e:
-            print(f"Batch failed ({batch[:3]}...): {e}")
+            print(f"Price batch failed ({batch[:3]}...): {e}")
         time.sleep(REQUEST_SLEEP)
 
     if not frames:
@@ -168,31 +220,36 @@ def download_nasdaq_composite():
         return pd.DataFrame(columns=["date", "nasdaq_close"])
 
     if isinstance(data.columns, pd.MultiIndex):
-        if ("Close" in data.columns.get_level_values(-1)):
+        if "Close" in data.columns.get_level_values(0):
+            close = data["Close"]
+        elif "Close" in data.columns.get_level_values(-1):
             close = data.xs("Close", axis=1, level=-1)
         else:
             return pd.DataFrame(columns=["date", "nasdaq_close"])
 
         if isinstance(close, pd.DataFrame):
             close = close.iloc[:, 0]
-
-        out = close.reset_index()
-        out.columns = ["date", "nasdaq_close"]
     else:
         if "Close" not in data.columns:
             return pd.DataFrame(columns=["date", "nasdaq_close"])
+        close = data["Close"]
 
-        out = data[["Close"]].reset_index()
+    out = close.rename("nasdaq_close").reset_index()
+
+    if "Date" in out.columns:
+        out = out.rename(columns={"Date": "date"})
+    elif out.columns.tolist()[0] != "date":
         out.columns = ["date", "nasdaq_close"]
 
     out["date"] = pd.to_datetime(out["date"]).dt.tz_localize(None)
     out["nasdaq_close"] = pd.to_numeric(out["nasdaq_close"], errors="coerce")
     out = out.dropna(subset=["date", "nasdaq_close"]).copy()
 
-    return out
+    return out[["date", "nasdaq_close"]]
+
 
 def ratio_to_json_value(value):
-    if value is None:
+    if value is None or pd.isna(value):
         return None
     if isinstance(value, float) and math.isinf(value):
         return "Infinity"
@@ -215,7 +272,6 @@ def build_rows(stock_df, ixic_df):
     df = df.sort_values(["symbol", "date"]).copy()
 
     df["prev_close"] = df.groupby("symbol")["close"].shift(1)
-
     df["adj_21"] = df.groupby("symbol")["adj_close"].shift(21)
     df["adj_34"] = df.groupby("symbol")["adj_close"].shift(34)
     df["adj_63"] = df.groupby("symbol")["adj_close"].shift(63)
@@ -311,7 +367,11 @@ def build_rows(stock_df, ixic_df):
 def main():
     print("Downloading Nasdaq universe...")
     symbols = download_nasdaq_universe()
-    print(f"Universe size: {len(symbols)}")
+    print(f"Universe size before market cap filter: {len(symbols)}")
+
+    print("Filtering to market cap >= $100M...")
+    symbols = filter_by_market_cap(symbols, MIN_MARKET_CAP)
+    print(f"Universe size after market cap filter: {len(symbols)}")
 
     print("Downloading stock histories...")
     stock_df = download_all_histories(symbols)
@@ -334,4 +394,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
