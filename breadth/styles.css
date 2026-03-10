@@ -233,6 +233,28 @@ thead th {
   white-space: nowrap;
 }
 
+/* ADD THIS RIGHT UNDER THEAD TH */
+thead .group-header {
+  text-align: center;
+  background: #0f1722;
+  color: #c9d1d9;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+thead tr:first-child th {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+thead tr:nth-child(2) th {
+  top: 46px;
+}
+
+
 tbody td {
   padding: 10px;
   border-bottom: 1px solid rgba(48, 54, 61, 0.6);
@@ -500,3 +522,4 @@ tbody td:first-child {
     grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   }
 }
+
