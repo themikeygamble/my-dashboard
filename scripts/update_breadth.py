@@ -2,7 +2,7 @@ import json
 import math
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -11,8 +11,9 @@ import yfinance as yf
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 
-LOOKBACK_PERIOD = "18mo"
-MAX_HISTORY_ROWS = 1500
+# how many extra days back to fetch to ensure rolling indicators are accurate
+INDICATOR_BUFFER_DAYS = 70
+
 PRICE_BATCH_SIZE = 120
 REQUEST_SLEEP = 0.35
 
@@ -21,6 +22,24 @@ SESSION.headers.update({
     "User-Agent": "Mozilla/5.0",
     "Accept": "text/plain,application/json,*/*"
 })
+
+
+def load_existing_data():
+    if not os.path.exists(OUTPUT_PATH):
+        print("No existing file found. Will do a full bootstrap.")
+        return [], None
+
+    with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    rows = payload.get("rows", [])
+    if not rows:
+        return [], None
+
+    existing_dates = {r["date"] for r in rows}
+    latest_date = max(existing_dates)
+    print(f"Existing data found. {len(rows)} rows. Latest date: {latest_date}")
+    return rows, latest_date
 
 
 def download_nasdaq_universe():
@@ -59,14 +78,15 @@ def chunked(items, size):
         yield items[i:i + size]
 
 
-def extract_batch_history(batch_symbols):
+def extract_batch_history(batch_symbols, start_date, end_date):
     yf_symbols = [to_yf_symbol(s) for s in batch_symbols]
     raw_to_yf = dict(zip(batch_symbols, yf_symbols))
     yf_to_raw = {v: k for k, v in raw_to_yf.items()}
 
     data = yf.download(
         tickers=yf_symbols,
-        period=LOOKBACK_PERIOD,
+        start=start_date,
+        end=end_date,
         interval="1d",
         auto_adjust=False,
         progress=False,
@@ -135,12 +155,12 @@ def extract_batch_history(batch_symbols):
     return out
 
 
-def download_all_histories(symbols):
+def download_all_histories(symbols, start_date, end_date):
     frames = []
 
     for batch in chunked(symbols, PRICE_BATCH_SIZE):
         try:
-            batch_df = extract_batch_history(batch)
+            batch_df = extract_batch_history(batch, start_date, end_date)
             if not batch_df.empty:
                 frames.append(batch_df)
         except Exception as e:
@@ -155,10 +175,11 @@ def download_all_histories(symbols):
     return df
 
 
-def download_nasdaq_composite():
+def download_nasdaq_composite(start_date, end_date):
     data = yf.download(
         tickers="^IXIC",
-        period=LOOKBACK_PERIOD,
+        start=start_date,
+        end=end_date,
         interval="1d",
         auto_adjust=False,
         progress=False,
@@ -242,7 +263,7 @@ def build_ranked_list(day_df, flag_col, ret_col):
     ]
 
 
-def build_rows(stock_df, ixic_df):
+def build_new_rows(stock_df, ixic_df, dates_to_build):
     df = stock_df.copy()
     if df.empty:
         return []
@@ -261,16 +282,12 @@ def build_rows(stock_df, ixic_df):
 
     df["up4_today"] = df["ret_1d"] >= 0.04
     df["down4_today"] = df["ret_1d"] <= -0.04
-
     df["up25_quarter"] = df["ret_63d"] >= 0.25
     df["down25_quarter"] = df["ret_63d"] <= -0.25
-
     df["up25_month"] = df["ret_21d"] >= 0.25
     df["down25_month"] = df["ret_21d"] <= -0.25
-
     df["up50_month"] = df["ret_21d"] >= 0.50
     df["down50_month"] = df["ret_21d"] <= -0.50
-
     df["up13_34d"] = df["ret_34d"] >= 0.13
     df["down13_34d"] = df["ret_34d"] <= -0.13
 
@@ -299,14 +316,12 @@ def build_rows(stock_df, ixic_df):
     if not ixic_df.empty:
         ixic_map = dict(zip(ixic_df["date"], ixic_df["nasdaq_close"]))
 
-    unique_dates = sorted(df["date"].dropna().unique())
-    if len(unique_dates) > MAX_HISTORY_ROWS:
-        unique_dates = unique_dates[-MAX_HISTORY_ROWS:]
-
     rows = []
 
-    for dt in unique_dates:
+    for dt in sorted(dates_to_build):
         day = df[df["date"] == dt].copy()
+        if day.empty:
+            continue
 
         lists = {
             "up4_today": build_ranked_list(day, "up4_today", "ret_1d"),
@@ -325,35 +340,78 @@ def build_rows(stock_df, ixic_df):
         ratio_10d = daily_counts.at[dt, "ratio_10d"] if dt in daily_counts.index else None
         nasdaq_close = ixic_map.get(dt)
 
-        row = {
+        rows.append({
             "date": pd.Timestamp(dt).strftime("%Y-%m-%d"),
-            "nasdaq_close": None if pd.isna(nasdaq_close) else round(float(nasdaq_close), 2),
+            "nasdaq_close": None if nasdaq_close is None or pd.isna(nasdaq_close) else round(float(nasdaq_close), 2),
             "ratio_5d": ratio_to_json_value(ratio_5d),
             "ratio_10d": ratio_to_json_value(ratio_10d),
             "lists": lists
-        }
-        rows.append(row)
+        })
 
-    rows.sort(key=lambda x: x["date"], reverse=True)
     return rows
 
 
 def main():
+    existing_rows, latest_date = load_existing_data()
+    existing_dates = {r["date"] for r in existing_rows}
+
+    today = datetime.now(timezone.utc).date()
+    tomorrow = today + timedelta(days=1)
+
+    if latest_date:
+        # fetch from latest_date minus buffer to ensure rolling indicators are correct
+        fetch_start = (
+            datetime.strptime(latest_date, "%Y-%m-%d").date()
+            - timedelta(days=INDICATOR_BUFFER_DAYS)
+        )
+        print(f"Incremental mode: fetching from {fetch_start} to {tomorrow}")
+    else:
+        # no existing data, bootstrap from 18 months ago
+        fetch_start = today - timedelta(days=548)
+        print(f"Bootstrap mode: fetching from {fetch_start} to {tomorrow}")
+
+    start_str = fetch_start.strftime("%Y-%m-%d")
+    end_str = tomorrow.strftime("%Y-%m-%d")
+
     print("Downloading Nasdaq universe...")
     symbols = download_nasdaq_universe()
     print(f"Universe size: {len(symbols)}")
 
     print("Downloading stock histories...")
-    stock_df = download_all_histories(symbols)
+    stock_df = download_all_histories(symbols, start_str, end_str)
 
     print("Downloading Nasdaq Composite...")
-    ixic_df = download_nasdaq_composite()
+    ixic_df = download_nasdaq_composite(start_str, end_str)
 
-    rows = build_rows(stock_df, ixic_df)
+    # only build rows for dates NOT already in existing data
+    available_dates = set(stock_df["date"].dt.strftime("%Y-%m-%d").unique()) if not stock_df.empty else set()
+    dates_to_build = {
+        pd.Timestamp(d)
+        for d in available_dates
+        if d not in existing_dates
+    }
+
+    if not dates_to_build:
+        print("No new dates to add. Data is already up to date.")
+        return
+
+    print(f"Building {len(dates_to_build)} new row(s)...")
+    new_rows = build_new_rows(stock_df, ixic_df, dates_to_build)
+
+    # merge new rows with existing, deduplicate by date, sort newest first
+    all_rows = existing_rows + new_rows
+    seen = set()
+    merged = []
+    for row in all_rows:
+        if row["date"] not in seen:
+            seen.add(row["date"])
+            merged.append(row)
+
+    merged.sort(key=lambda x: x["date"], reverse=True)
 
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "rows": rows
+        "rows": merged
     }
 
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
@@ -361,7 +419,7 @@ def main():
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
 
-    print(f"Wrote {len(rows)} rows to {OUTPUT_PATH}")
+    print(f"Done. Total rows: {len(merged)} (+{len(new_rows)} new)")
 
 
 if __name__ == "__main__":
