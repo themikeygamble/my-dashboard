@@ -1,4 +1,22 @@
 {
-  "generated_at_utc": null,
-  "rows": []
+  "rows": [
+    {
+      "date": "",
+      "nasdaq_close": null,
+      "ratio_5d": null,
+      "ratio_10d": null,
+      "lists": {
+        "up4_today": [],
+        "down4_today": [],
+        "up25_quarter": [],
+        "down25_quarter": [],
+        "up25_month": [],
+        "down25_month": [],
+        "up50_month": [],
+        "down50_month": [],
+        "up13_34d": [],
+        "down13_34d": []
+      }
+    }
+  ]
 }
