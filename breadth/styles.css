@@ -253,7 +253,18 @@ thead tr:first-child th {
 thead tr:nth-child(2) th {
   top: 46px;
 }
+/* divider between Primary and Secondary sections */
+thead tr:first-child th.group-header:first-of-type {
+  border-right: 2px solid #35507a;
+}
 
+thead tr:nth-child(2) th:nth-child(6) {
+  border-right: 2px solid #35507a;
+}
+
+tbody td:nth-child(8) {
+  border-right: 2px solid #24354d;
+}
 
 tbody td {
   padding: 10px;
@@ -522,4 +533,5 @@ tbody td:first-child {
     grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   }
 }
+
 
