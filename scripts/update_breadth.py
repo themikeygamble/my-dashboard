@@ -16,7 +16,8 @@ INDICATOR_BUFFER_DAYS = 70
 PRICE_BATCH_SIZE = 120
 REQUEST_SLEEP = 0.35
 
-MIN_AVG_DOLLAR_VOLUME = 10_000_000  # $10M average daily dollar volume over 30 days
+MIN_PRICE = 1.0
+MIN_AVG_VOLUME = 100_000
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -77,6 +78,7 @@ def download_other_universe():
     rows = [line.split("|") for line in lines[1:] if line and not line.startswith("File Creation Time")]
     df = pd.DataFrame(rows, columns=header)
 
+    # Column names in otherlisted.txt
     df.columns = [c.strip() for c in df.columns]
 
     act_col = "ACT Symbol"
@@ -86,9 +88,11 @@ def download_other_universe():
     df["Symbol"] = df[act_col].astype(str).str.strip().str.upper()
     df["ETF"] = df["ETF"].astype(str).str.strip().str.upper()
     df["Test Issue"] = df["Test Issue"].astype(str).str.strip().str.upper()
-    df["Exchange"] = df["Exchange"].astype(str).str.strip().str.upper()
 
+    # Only keep NYSE (N), NYSE ARCA (P), NYSE MKT/AMEX (A), BATS/CBOE (Z)
+    df["Exchange"] = df["Exchange"].astype(str).str.strip().str.upper()
     df = df[df["Exchange"].isin(["N", "P", "A", "Z"])].copy()
+
     df = df[df["Test Issue"] == "N"].copy()
     df = df[df["ETF"] == "N"].copy()
 
@@ -105,10 +109,13 @@ def filter_derivatives(df):
     def is_derivative(symbol):
         if len(symbol) < 2:
             return False
+        # Warrants, Rights, Units where base symbol exists
         if symbol[-1] in ("W", "R", "U") and symbol[:-1] in symbol_set:
             return True
+        # WS suffix (warrants)
         if len(symbol) >= 3 and symbol[-2:] == "WS" and symbol[:-2] in symbol_set:
             return True
+        # Preferred shares — contain $ or - or end in P/A/B/C/D after a letter
         if "$" in symbol or "-" in symbol:
             return True
         return False
@@ -259,24 +266,25 @@ def apply_liquidity_filter(stock_df):
     if stock_df.empty:
         return stock_df
 
-    df = stock_df.copy()
-    df["dollar_volume"] = df["close"] * df["volume"]
-
     stats = (
-        df.sort_values("date")
+        stock_df.sort_values("date")
         .groupby("symbol")
-        .tail(30)
+        .tail(20)
         .groupby("symbol")
-        .agg(avg_dollar_volume=("dollar_volume", "mean"))
+        .agg(
+            last_close=("close", "last"),
+            avg_volume=("volume", "mean")
+        )
         .reset_index()
     )
 
     qualified = stats[
-        stats["avg_dollar_volume"] >= MIN_AVG_DOLLAR_VOLUME
+        (stats["last_close"] >= MIN_PRICE) &
+        (stats["avg_volume"] >= MIN_AVG_VOLUME)
     ]["symbol"].tolist()
 
     removed = stock_df["symbol"].nunique() - len(qualified)
-    print(f"Liquidity filter: kept {len(qualified)} symbols, removed {removed} (avg 30d dollar vol < ${MIN_AVG_DOLLAR_VOLUME:,.0f})")
+    print(f"Liquidity filter: kept {len(qualified)} symbols, removed {removed} (price < ${MIN_PRICE} or avg vol < {MIN_AVG_VOLUME:,})")
 
     return stock_df[stock_df["symbol"].isin(qualified)].copy()
 
