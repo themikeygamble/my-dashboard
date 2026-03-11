@@ -23,12 +23,23 @@ const PAIRS = [
 ];
 
 let breadthData = [];
+let sectorMap = {};
 let selectedYear = "2026";
 
 async function loadData() {
-  const res = await fetch("../data/breadth-history.json", { cache: "no-store" });
-  const json = await res.json();
-  breadthData = json.rows || [];
+  const [breadthRes, sectorRes] = await Promise.allSettled([
+    fetch("../data/breadth-history.json", { cache: "no-store" }),
+    fetch("../data/sector-map.json", { cache: "no-store" })
+  ]);
+
+  if (breadthRes.status === "fulfilled" && breadthRes.value.ok) {
+    const json = await breadthRes.value.json();
+    breadthData = json.rows || [];
+  }
+
+  if (sectorRes.status === "fulfilled" && sectorRes.value.ok) {
+    sectorMap = await sectorRes.value.json();
+  }
 
   if (!breadthData.length) {
     renderYearTabs([]);
@@ -38,8 +49,6 @@ async function loadData() {
     document.getElementById("subhead").textContent = "Interactive market monitor";
     return;
   }
-
-  renderYearTabs(breadthData);
 
   const availableYears = getAvailableYears(breadthData);
   if (!availableYears.includes(selectedYear)) {
@@ -171,16 +180,12 @@ function getPairStyles(upCount, downCount) {
   const ratio = upCount / downCount;
 
   if (ratio > 1) {
-    if (ratio >= 2) {
-      return { upClass: "bull-dominant", downClass: "bull-mid" };
-    }
+    if (ratio >= 2) return { upClass: "bull-dominant", downClass: "bull-mid" };
     return { upClass: "bull-dominant", downClass: "bull-soft" };
   }
 
   if (ratio < 1) {
-    if (ratio <= 0.5) {
-      return { upClass: "bear-soft", downClass: "bear-dominant" };
-    }
+    if (ratio <= 0.5) return { upClass: "bear-soft", downClass: "bear-dominant" };
     return { upClass: "bear-mid", downClass: "bear-dominant" };
   }
 
@@ -188,12 +193,8 @@ function getPairStyles(upCount, downCount) {
 }
 
 function getRatioClass(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return "plain-num";
-  }
-
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "plain-num";
   const ratio = Number(value);
-
   if (ratio >= 2) return "bull-dominant";
   if (ratio > 1) return "bull-mid";
   if (ratio === 1) return "badge-neutral";
@@ -204,23 +205,14 @@ function getRatioClass(value) {
 function normalizeListItems(items) {
   return (items || []).map(item => {
     if (typeof item === "string") {
-      return {
-        symbol: item,
-        percent: null
-      };
+      return { symbol: item, percent: null };
     }
 
     const rawPercent =
-      item.percent ??
-      item.pct ??
-      item.pct_change ??
-      item.pctChange ??
-      item.changePercent ??
-      item.percentage ??
-      item.value;
+      item.percent ?? item.pct ?? item.pct_change ??
+      item.pctChange ?? item.changePercent ?? item.percentage ?? item.value;
 
     let percent = null;
-
     if (typeof rawPercent === "number" && Number.isFinite(rawPercent)) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
@@ -241,19 +233,23 @@ function formatPercent(value) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-function getMagnitude(value) {
-  return Number.isFinite(value) ? Math.abs(value) : -Infinity;
-}
-
 function sortLeaderboardItems(items) {
   return [...items].sort((a, b) => {
-    const magDiff = getMagnitude(b.percent) - getMagnitude(a.percent);
-    if (magDiff !== 0) return magDiff;
-
-    const aPct = Number.isFinite(a.percent) ? a.percent : -Infinity;
-    const bPct = Number.isFinite(b.percent) ? b.percent : -Infinity;
-    return bPct - aPct;
+    const aMag = Number.isFinite(a.percent) ? Math.abs(a.percent) : -Infinity;
+    const bMag = Number.isFinite(b.percent) ? Math.abs(b.percent) : -Infinity;
+    if (bMag !== aMag) return bMag - aMag;
+    return (Number.isFinite(b.percent) ? b.percent : -Infinity) -
+           (Number.isFinite(a.percent) ? a.percent : -Infinity);
   });
+}
+
+function getSectorInfo(symbol) {
+  const entry = sectorMap[symbol];
+  if (!entry) return { sector: "", industry: "" };
+  return {
+    sector: entry.sector || "",
+    industry: entry.industry || ""
+  };
 }
 
 function renderLeaderboard(grid, items) {
@@ -264,16 +260,23 @@ function renderLeaderboard(grid, items) {
   head.innerHTML = `
     <span class="leader-rank">#</span>
     <span class="leader-symbol">Ticker</span>
+    <span class="leader-meta">Sector · Industry</span>
     <span class="leader-percent">% Change</span>
   `;
   grid.appendChild(head);
 
   items.forEach((item, index) => {
+    const { sector, industry } = getSectorInfo(item.symbol);
+    const metaText = sector && industry
+      ? `${sector} · ${industry}`
+      : sector || industry || "—";
+
     const row = document.createElement("div");
     row.className = "leaderboard-row";
     row.innerHTML = `
       <span class="leader-rank">${index + 1}</span>
       <span class="leader-symbol">${item.symbol}</span>
+      <span class="leader-meta">${metaText}</span>
       <span class="leader-percent">${formatPercent(item.percent)}</span>
     `;
     grid.appendChild(row);
@@ -314,9 +317,7 @@ function openModal(date, label, rawItems) {
   copyBtn.onclick = async () => {
     await navigator.clipboard.writeText(baseItems.map(item => item.symbol).join(", "));
     copyBtn.textContent = "Copied";
-    setTimeout(() => {
-      copyBtn.textContent = "Copy list";
-    }, 1200);
+    setTimeout(() => { copyBtn.textContent = "Copy list"; }, 1200);
   };
 
   modal.classList.remove("hidden");
@@ -324,25 +325,17 @@ function openModal(date, label, rawItems) {
 
 function formatNumber(value) {
   if (value === null || value === undefined || value === "") return "--";
-
   if (typeof value === "number" && Math.abs(value) >= 1000) {
     return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
-
   return typeof value === "number"
     ? value.toFixed(2).replace(/\.00$/, "")
     : value;
 }
 
 function formatRatio(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return "--";
-  }
-
-  if (!Number.isFinite(Number(value))) {
-    return "∞";
-  }
-
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "--";
+  if (!Number.isFinite(Number(value))) return "∞";
   return Number(value).toFixed(2);
 }
 
