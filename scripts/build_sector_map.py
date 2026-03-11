@@ -7,6 +7,7 @@ import requests
 import pandas as pd
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
+OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/sector-map.json"
 SLEEP = 0.5
 
@@ -37,9 +38,78 @@ def download_nasdaq_universe():
 
     bad_chars = ["^", "$", "/"]
     for ch in bad_chars:
-        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)]
+        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
 
-    return df["Symbol"].dropna().unique().tolist()
+    return df[["Symbol"]].copy()
+
+
+def download_other_universe():
+    r = SESSION.get(OTHER_LISTED_URL, timeout=60)
+    r.raise_for_status()
+
+    lines = r.text.strip().splitlines()
+    header = lines[0].split("|")
+    rows = [line.split("|") for line in lines[1:] if line and not line.startswith("File Creation Time")]
+    df = pd.DataFrame(rows, columns=header)
+
+    df.columns = [c.strip() for c in df.columns]
+
+    act_col = "ACT Symbol"
+    if act_col not in df.columns:
+        act_col = df.columns[0]
+
+    df["Symbol"] = df[act_col].astype(str).str.strip().str.upper()
+    df["ETF"] = df["ETF"].astype(str).str.strip().str.upper()
+    df["Test Issue"] = df["Test Issue"].astype(str).str.strip().str.upper()
+    df["Exchange"] = df["Exchange"].astype(str).str.strip().str.upper()
+
+    df = df[df["Exchange"].isin(["N", "P", "A", "Z"])].copy()
+    df = df[df["Test Issue"] == "N"].copy()
+    df = df[df["ETF"] == "N"].copy()
+
+    bad_chars = ["^", "$", "/"]
+    for ch in bad_chars:
+        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
+
+    return df[["Symbol"]].copy()
+
+
+def filter_derivatives(df):
+    symbol_set = set(df["Symbol"].tolist())
+
+    def is_derivative(symbol):
+        if len(symbol) < 2:
+            return False
+        if symbol[-1] in ("W", "R", "U") and symbol[:-1] in symbol_set:
+            return True
+        if len(symbol) >= 3 and symbol[-2:] == "WS" and symbol[:-2] in symbol_set:
+            return True
+        if "$" in symbol or "-" in symbol:
+            return True
+        return False
+
+    before = len(df)
+    df = df[~df["Symbol"].apply(is_derivative)].copy()
+    after = len(df)
+    print(f"Derivative filter removed {before - after} symbols")
+    return df
+
+
+def build_full_universe():
+    print("Downloading Nasdaq universe...")
+    nasdaq_df = download_nasdaq_universe()
+
+    print("Downloading other exchange universe (NYSE, NYSE ARCA, AMEX, CBOE)...")
+    other_df = download_other_universe()
+
+    combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["Symbol"]).copy()
+    combined = filter_derivatives(combined)
+
+    symbols = combined["Symbol"].dropna().unique().tolist()
+    symbols.sort()
+    print(f"Total universe: {len(symbols)} symbols")
+    return symbols
 
 
 def load_existing_map():
@@ -50,9 +120,7 @@ def load_existing_map():
 
 
 def main():
-    print("Downloading Nasdaq universe...")
-    symbols = download_nasdaq_universe()
-    print(f"Total symbols: {len(symbols)}")
+    symbols = build_full_universe()
 
     existing = load_existing_map()
     to_fetch = [s for s in symbols if s not in existing]
