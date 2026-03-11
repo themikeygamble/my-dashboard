@@ -9,15 +9,14 @@ import requests
 import yfinance as yf
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
+OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 
 INDICATOR_BUFFER_DAYS = 70
 PRICE_BATCH_SIZE = 120
 REQUEST_SLEEP = 0.35
 
-# Liquidity filter — applied after downloading price history
-MIN_PRICE = 1.0           # minimum last close price
-MIN_AVG_VOLUME = 100_000  # minimum 20-day average volume
+MIN_AVG_DOLLAR_VOLUME = 10_000_000  # $10M average daily dollar volume over 30 days
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -66,8 +65,41 @@ def download_nasdaq_universe():
     for ch in bad_chars:
         df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
 
-    # Remove derivative securities: warrants (W), rights (R), units (U), warrants (WS)
-    # Only filter if the base symbol (without suffix) also exists in the universe
+    return df[["Symbol"]].copy()
+
+
+def download_other_universe():
+    r = SESSION.get(OTHER_LISTED_URL, timeout=60)
+    r.raise_for_status()
+
+    lines = r.text.strip().splitlines()
+    header = lines[0].split("|")
+    rows = [line.split("|") for line in lines[1:] if line and not line.startswith("File Creation Time")]
+    df = pd.DataFrame(rows, columns=header)
+
+    df.columns = [c.strip() for c in df.columns]
+
+    act_col = "ACT Symbol"
+    if act_col not in df.columns:
+        act_col = df.columns[0]
+
+    df["Symbol"] = df[act_col].astype(str).str.strip().str.upper()
+    df["ETF"] = df["ETF"].astype(str).str.strip().str.upper()
+    df["Test Issue"] = df["Test Issue"].astype(str).str.strip().str.upper()
+    df["Exchange"] = df["Exchange"].astype(str).str.strip().str.upper()
+
+    df = df[df["Exchange"].isin(["N", "P", "A", "Z"])].copy()
+    df = df[df["Test Issue"] == "N"].copy()
+    df = df[df["ETF"] == "N"].copy()
+
+    bad_chars = ["^", "$", "/"]
+    for ch in bad_chars:
+        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
+
+    return df[["Symbol"]].copy()
+
+
+def filter_derivatives(df):
     symbol_set = set(df["Symbol"].tolist())
 
     def is_derivative(symbol):
@@ -77,15 +109,31 @@ def download_nasdaq_universe():
             return True
         if len(symbol) >= 3 and symbol[-2:] == "WS" and symbol[:-2] in symbol_set:
             return True
+        if "$" in symbol or "-" in symbol:
+            return True
         return False
 
     before = len(df)
     df = df[~df["Symbol"].apply(is_derivative)].copy()
     after = len(df)
-    print(f"Derivative filter removed {before - after} symbols (warrants/rights/units)")
+    print(f"Derivative filter removed {before - after} symbols (warrants/rights/units/preferred)")
+    return df
 
-    symbols = df["Symbol"].dropna().unique().tolist()
+
+def build_full_universe():
+    print("Downloading Nasdaq universe...")
+    nasdaq_df = download_nasdaq_universe()
+
+    print("Downloading other exchange universe (NYSE, NYSE ARCA, AMEX, CBOE)...")
+    other_df = download_other_universe()
+
+    combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["Symbol"]).copy()
+    combined = filter_derivatives(combined)
+
+    symbols = combined["Symbol"].dropna().unique().tolist()
     symbols.sort()
+    print(f"Total universe after filters: {len(symbols)} symbols")
     return symbols
 
 
@@ -184,14 +232,19 @@ def extract_batch_history(batch_symbols, start_date, end_date):
 
 def download_all_histories(symbols, start_date, end_date):
     frames = []
+    total_batches = math.ceil(len(symbols) / PRICE_BATCH_SIZE)
 
-    for batch in chunked(symbols, PRICE_BATCH_SIZE):
+    for i, batch in enumerate(chunked(symbols, PRICE_BATCH_SIZE)):
         try:
             batch_df = extract_batch_history(batch, start_date, end_date)
             if not batch_df.empty:
                 frames.append(batch_df)
         except Exception as e:
-            print(f"Price batch failed ({batch[:3]}...): {e}")
+            print(f"Price batch {i+1}/{total_batches} failed ({batch[:3]}...): {e}")
+
+        if (i + 1) % 10 == 0:
+            print(f"  Downloaded batch {i+1}/{total_batches}...")
+
         time.sleep(REQUEST_SLEEP)
 
     if not frames:
@@ -206,26 +259,24 @@ def apply_liquidity_filter(stock_df):
     if stock_df.empty:
         return stock_df
 
-    # Use the most recent 20 trading days available per symbol
+    df = stock_df.copy()
+    df["dollar_volume"] = df["close"] * df["volume"]
+
     stats = (
-        stock_df.sort_values("date")
+        df.sort_values("date")
         .groupby("symbol")
-        .tail(20)
+        .tail(30)
         .groupby("symbol")
-        .agg(
-            last_close=("close", "last"),
-            avg_volume=("volume", "mean")
-        )
+        .agg(avg_dollar_volume=("dollar_volume", "mean"))
         .reset_index()
     )
 
     qualified = stats[
-        (stats["last_close"] >= MIN_PRICE) &
-        (stats["avg_volume"] >= MIN_AVG_VOLUME)
+        stats["avg_dollar_volume"] >= MIN_AVG_DOLLAR_VOLUME
     ]["symbol"].tolist()
 
     removed = stock_df["symbol"].nunique() - len(qualified)
-    print(f"Liquidity filter: kept {len(qualified)} symbols, removed {removed} (price < ${MIN_PRICE} or avg vol < {MIN_AVG_VOLUME:,})")
+    print(f"Liquidity filter: kept {len(qualified)} symbols, removed {removed} (avg 30d dollar vol < ${MIN_AVG_DOLLAR_VOLUME:,.0f})")
 
     return stock_df[stock_df["symbol"].isin(qualified)].copy()
 
@@ -252,7 +303,6 @@ def download_nasdaq_composite(start_date, end_date):
             close = data.xs("Close", axis=1, level=-1)
         else:
             return pd.DataFrame(columns=["date", "nasdaq_close"])
-
         if isinstance(close, pd.DataFrame):
             close = close.iloc[:, 0]
     else:
@@ -426,9 +476,7 @@ def main():
     start_str = fetch_start.strftime("%Y-%m-%d")
     end_str = tomorrow.strftime("%Y-%m-%d")
 
-    print("Downloading Nasdaq universe...")
-    symbols = download_nasdaq_universe()
-    print(f"Universe size after derivative filter: {len(symbols)}")
+    symbols = build_full_universe()
 
     print("Downloading stock histories...")
     stock_df = download_all_histories(symbols, start_str, end_str)
