@@ -11,11 +11,13 @@ import yfinance as yf
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 
-# how many extra days back to fetch to ensure rolling indicators are accurate
 INDICATOR_BUFFER_DAYS = 70
-
 PRICE_BATCH_SIZE = 120
 REQUEST_SLEEP = 0.35
+
+# Liquidity filter — applied after downloading price history
+MIN_PRICE = 1.0           # minimum last close price
+MIN_AVG_VOLUME = 100_000  # minimum 20-day average volume
 
 SESSION = requests.Session()
 SESSION.headers.update({
@@ -62,7 +64,25 @@ def download_nasdaq_universe():
 
     bad_chars = ["^", "$", "/"]
     for ch in bad_chars:
-        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)]
+        df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
+
+    # Remove derivative securities: warrants (W), rights (R), units (U), warrants (WS)
+    # Only filter if the base symbol (without suffix) also exists in the universe
+    symbol_set = set(df["Symbol"].tolist())
+
+    def is_derivative(symbol):
+        if len(symbol) < 2:
+            return False
+        if symbol[-1] in ("W", "R", "U") and symbol[:-1] in symbol_set:
+            return True
+        if len(symbol) >= 3 and symbol[-2:] == "WS" and symbol[:-2] in symbol_set:
+            return True
+        return False
+
+    before = len(df)
+    df = df[~df["Symbol"].apply(is_derivative)].copy()
+    after = len(df)
+    print(f"Derivative filter removed {before - after} symbols (warrants/rights/units)")
 
     symbols = df["Symbol"].dropna().unique().tolist()
     symbols.sort()
@@ -96,7 +116,7 @@ def extract_batch_history(batch_symbols, start_date, end_date):
     )
 
     if data is None or data.empty:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
 
     frames = []
 
@@ -114,16 +134,19 @@ def extract_batch_history(batch_symbols, start_date, end_date):
             sub = sub.rename(columns={
                 "Date": "date",
                 "Close": "close",
-                "Adj Close": "adj_close"
+                "Adj Close": "adj_close",
+                "Volume": "volume"
             })
 
-            keep_cols = [c for c in ["date", "close", "adj_close"] if c in sub.columns]
+            keep_cols = [c for c in ["date", "close", "adj_close", "volume"] if c in sub.columns]
             sub = sub[keep_cols].copy()
 
             if "close" not in sub.columns:
                 continue
             if "adj_close" not in sub.columns:
                 sub["adj_close"] = sub["close"]
+            if "volume" not in sub.columns:
+                sub["volume"] = 0
 
             sub["symbol"] = yf_to_raw[yf_symbol]
             frames.append(sub)
@@ -131,25 +154,29 @@ def extract_batch_history(batch_symbols, start_date, end_date):
         sub = data.reset_index().rename(columns={
             "Date": "date",
             "Close": "close",
-            "Adj Close": "adj_close"
+            "Adj Close": "adj_close",
+            "Volume": "volume"
         })
 
-        keep_cols = [c for c in ["date", "close", "adj_close"] if c in sub.columns]
+        keep_cols = [c for c in ["date", "close", "adj_close", "volume"] if c in sub.columns]
         sub = sub[keep_cols].copy()
 
         if "close" in sub.columns:
             if "adj_close" not in sub.columns:
                 sub["adj_close"] = sub["close"]
+            if "volume" not in sub.columns:
+                sub["volume"] = 0
             sub["symbol"] = batch_symbols[0]
             frames.append(sub)
 
     if not frames:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
 
     out = pd.concat(frames, ignore_index=True)
     out["date"] = pd.to_datetime(out["date"]).dt.tz_localize(None)
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
     out["adj_close"] = pd.to_numeric(out["adj_close"], errors="coerce")
+    out["volume"] = pd.to_numeric(out["volume"], errors="coerce").fillna(0)
     out = out.dropna(subset=["date", "symbol", "close", "adj_close"]).copy()
 
     return out
@@ -168,11 +195,39 @@ def download_all_histories(symbols, start_date, end_date):
         time.sleep(REQUEST_SLEEP)
 
     if not frames:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
 
     df = pd.concat(frames, ignore_index=True)
     df = df.sort_values(["symbol", "date"]).drop_duplicates(["symbol", "date"], keep="last")
     return df
+
+
+def apply_liquidity_filter(stock_df):
+    if stock_df.empty:
+        return stock_df
+
+    # Use the most recent 20 trading days available per symbol
+    stats = (
+        stock_df.sort_values("date")
+        .groupby("symbol")
+        .tail(20)
+        .groupby("symbol")
+        .agg(
+            last_close=("close", "last"),
+            avg_volume=("volume", "mean")
+        )
+        .reset_index()
+    )
+
+    qualified = stats[
+        (stats["last_close"] >= MIN_PRICE) &
+        (stats["avg_volume"] >= MIN_AVG_VOLUME)
+    ]["symbol"].tolist()
+
+    removed = stock_df["symbol"].nunique() - len(qualified)
+    print(f"Liquidity filter: kept {len(qualified)} symbols, removed {removed} (price < ${MIN_PRICE} or avg vol < {MIN_AVG_VOLUME:,})")
+
+    return stock_df[stock_df["symbol"].isin(qualified)].copy()
 
 
 def download_nasdaq_composite(start_date, end_date):
@@ -359,14 +414,12 @@ def main():
     tomorrow = today + timedelta(days=1)
 
     if latest_date:
-        # fetch from latest_date minus buffer to ensure rolling indicators are correct
         fetch_start = (
             datetime.strptime(latest_date, "%Y-%m-%d").date()
             - timedelta(days=INDICATOR_BUFFER_DAYS)
         )
         print(f"Incremental mode: fetching from {fetch_start} to {tomorrow}")
     else:
-        # no existing data, bootstrap from 18 months ago
         fetch_start = today - timedelta(days=548)
         print(f"Bootstrap mode: fetching from {fetch_start} to {tomorrow}")
 
@@ -375,15 +428,17 @@ def main():
 
     print("Downloading Nasdaq universe...")
     symbols = download_nasdaq_universe()
-    print(f"Universe size: {len(symbols)}")
+    print(f"Universe size after derivative filter: {len(symbols)}")
 
     print("Downloading stock histories...")
     stock_df = download_all_histories(symbols, start_str, end_str)
 
+    print("Applying liquidity filter...")
+    stock_df = apply_liquidity_filter(stock_df)
+
     print("Downloading Nasdaq Composite...")
     ixic_df = download_nasdaq_composite(start_str, end_str)
 
-    # only build rows for dates NOT already in existing data
     available_dates = set(stock_df["date"].dt.strftime("%Y-%m-%d").unique()) if not stock_df.empty else set()
     dates_to_build = {
         pd.Timestamp(d)
@@ -398,7 +453,6 @@ def main():
     print(f"Building {len(dates_to_build)} new row(s)...")
     new_rows = build_new_rows(stock_df, ixic_df, dates_to_build)
 
-    # merge new rows with existing, deduplicate by date, sort newest first
     all_rows = existing_rows + new_rows
     seen = set()
     merged = []
