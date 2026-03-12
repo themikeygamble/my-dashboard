@@ -12,7 +12,7 @@ NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.tx
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 
-INDICATOR_BUFFER_DAYS = 70
+INDICATOR_BUFFER_DAYS = 120
 PRICE_BATCH_SIZE = 120
 REQUEST_SLEEP = 0.35
 
@@ -534,3 +534,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
