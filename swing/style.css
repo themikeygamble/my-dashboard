@@ -47,46 +47,46 @@ header {
   position: sticky;
   top: 0;
   z-index: 200;
-}
-.header-inner {
-  max-width: 1380px;
-  margin: 0 auto;
-  padding: 0 28px;
-  height: 62px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 28px;
+  height: 56px;
 }
-.logo { display: flex; align-items: center; gap: 10px; }
-.logo-icon { font-size: 20px; }
-.logo-text { font-size: 17px; font-weight: 800; color: var(--bright); letter-spacing: -0.4px; }
-.logo-divider { width: 1px; height: 18px; background: var(--border2); }
-.logo-sub { font-size: 11px; color: var(--dim); }
 
-.tab-nav {
-  display: flex;
-  gap: 3px;
-  background: var(--bg);
-  padding: 4px;
-  border-radius: var(--r);
-  border: 1px solid var(--border);
+.site-name-link {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--bright);
+  text-decoration: none;
+  letter-spacing: -0.3px;
+  flex-shrink: 0;
 }
-.tab-btn {
-  background: transparent;
-  border: none;
+.site-name-link:hover { color: var(--cyan); }
+
+header nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+header nav a {
   color: var(--dim);
-  padding: 7px 18px;
-  border-radius: 7px;
-  cursor: pointer;
+  text-decoration: none;
   font-size: 13px;
   font-weight: 600;
-  font-family: var(--font);
+  padding: 6px 14px;
+  border-radius: 7px;
   transition: all 0.15s;
+  white-space: nowrap;
 }
-.tab-btn:hover { color: var(--text2); background: var(--card); }
-.tab-btn.active {
-  background: var(--card2);
+header nav a:hover {
+  color: var(--text2);
+  background: var(--card);
+}
+header nav a.active {
   color: var(--bright);
+  background: var(--card2);
   box-shadow: inset 0 0 0 1px var(--border2);
 }
 
@@ -129,6 +129,34 @@ main {
 }
 .date-badge { color: var(--dim); border-color: var(--border); }
 .panel-controls { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+/* ── TAB NAV (inside page, not header) ───── */
+.tab-nav {
+  display: flex;
+  gap: 3px;
+  background: var(--bg);
+  padding: 4px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  padding: 7px 18px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text2); background: var(--card); }
+.tab-btn.active {
+  background: var(--card2);
+  color: var(--bright);
+  box-shadow: inset 0 0 0 1px var(--border2);
+}
 
 /* ── BUTTONS ────────────────────────────── */
 .btn {
@@ -497,14 +525,14 @@ td { padding: 12px 14px; }
 
 /* ── RESPONSIVE ─────────────────────────── */
 @media (max-width: 900px) {
-  .header-inner { padding: 0 16px; }
-  .logo-sub, .logo-divider { display: none; }
+  header { padding: 0 16px; }
   main { padding: 20px 16px 40px; }
   .panel-header { flex-direction: column; }
   .ac-grid { grid-template-columns: 1fr; }
   #ticker-input { max-width: 100%; }
 }
 @media (max-width: 600px) {
+  header nav a { padding: 6px 10px; font-size: 12px; }
   .tab-btn { padding: 7px 12px; font-size: 12px; }
   th, td { padding: 10px 10px; }
 }
