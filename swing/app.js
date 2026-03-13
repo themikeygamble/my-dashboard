@@ -2,49 +2,42 @@
    SwingScan — app.js
 ═══════════════════════════════════════ */
 
-// ── CONFIG ── Update this after deploying your Render backend ─────────────────
-const API_BASE = 'https://YOUR-APP-NAME.onrender.com';
+const API_BASE  = 'https://swingscan.onrender.com';
+const DATA_BASE = '../data';
 
-const DEFAULT_UNIVERSE = [
-  "NVDA","AMD","AVGO","SMCI","ARM","TSM","AEHR","MRVL",
-  "MSTR","COIN","HOOD","MARA","RIOT","CLSK","CIFR","HUT",
-  "META","TSLA","PLTR","SOFI","UPST","CRWD","NET","DDOG","AXON",
-  "IONQ","RGTI","QUBT","QBTS","ARQQ",
-  "ACHR","JOBY","RKLB","LUNR","BLNK",
-  "SNOW","BILL","RBLX","SHOP","U","CELH",
-  "BABA","JD","PDD",
-  "GME","SOUN","BBAI","CLOV",
-];
-
-// ── STATE ─────────────────────────────────────────────────────────────────────
-let screenerCache = [];
-let currentSort   = 'score';
+let screenerCache  = [];
+let currentSort    = 'score';
+let availableDates = [];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('scan-date').textContent =
-    new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+document.addEventListener('DOMContentLoaded', async () => {
 
-  // Tabs
+  // Tab buttons (in header)
   document.querySelectorAll('.tab-btn').forEach(btn =>
     btn.addEventListener('click', () => switchTab(btn.dataset.tab))
   );
 
-  // Screener
-  document.getElementById('scan-btn').addEventListener('click',    () => runScreener(false));
-  document.getElementById('refresh-btn').addEventListener('click', () => runScreener(true));
+  // Sort dropdown
   document.getElementById('sort-select').addEventListener('change', e => {
     currentSort = e.target.value;
     if (screenerCache.length) renderTable(sortData(screenerCache, currentSort));
   });
 
-  // Rater
-  document.getElementById('analyze-btn').addEventListener('click', analyzeStock);
+  // Date picker
+  document.getElementById('date-select').addEventListener('change', () => loadScan());
+
+  // Load scan button
+  document.getElementById('scan-btn').addEventListener('click', () => loadScan());
+
+  // Rater — analyze button
+  document.getElementById('analyze-btn').addEventListener('click', () => analyzeStock());
+
+  // Rater — enter key
   document.getElementById('ticker-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') analyzeStock();
   });
 
-  // Quick picks
+  // Quick pick buttons
   document.querySelectorAll('.qp-btn').forEach(btn =>
     btn.addEventListener('click', () => {
       document.getElementById('ticker-input').value = btn.dataset.ticker;
@@ -52,10 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   );
 
-  // Modal
+  // Modal close
   document.querySelector('.modal-close').addEventListener('click', closeModal);
   document.querySelector('.modal-backdrop').addEventListener('click', closeModal);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // On load — fetch date index then load latest scan
+  await loadDateIndex();
+  loadScan();
 });
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
@@ -69,64 +66,104 @@ function switchTab(tab) {
   });
 }
 
-// ── SCREENER ──────────────────────────────────────────────────────────────────
-async function runScreener(forceRefresh = false) {
-  const btn        = document.getElementById('scan-btn');
-  const statusBar  = document.getElementById('screener-status');
-  const progFill   = document.getElementById('progress-fill');
-  const statusTxt  = document.getElementById('status-text');
-
-  btn.disabled = true;
-  btn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></div> Scanning...`;
-
-  document.getElementById('screener-results').classList.add('hidden');
-  document.getElementById('screener-empty').classList.add('hidden');
-  statusBar.classList.remove('hidden');
-
-  // Animate fake progress
-  let prog = 0;
-  const ticker = setInterval(() => {
-    prog = Math.min(prog + Math.random() * 4, 88);
-    progFill.style.width = prog + '%';
-    statusTxt.textContent = `Scanning ${DEFAULT_UNIVERSE.length} tickers for ADR>5% & Vol>$20M...`;
-  }, 600);
-
+// ── DATE INDEX ────────────────────────────────────────────────────────────────
+async function loadDateIndex() {
   try {
-    const res = await fetch(`${API_BASE}/api/screen`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ tickers: DEFAULT_UNIVERSE, force_refresh: forceRefresh }),
+    const res = await fetch(`${DATA_BASE}/index.json?t=${Date.now()}`);
+    if (!res.ok) return;
+    const idx = await res.json();
+
+    availableDates = idx.dates || [];
+    const sel = document.getElementById('date-select');
+    sel.innerHTML = '';
+
+    availableDates.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = i === 0 ? `${formatDate(d)} (latest)` : formatDate(d);
+      sel.appendChild(opt);
     });
 
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    if (availableDates.length > 0) {
+      sel.classList.remove('hidden');
+    }
+  } catch (_) {
+    // No index yet — first run
+  }
+}
+
+// ── LOAD SCAN ─────────────────────────────────────────────────────────────────
+async function loadScan() {
+  const sel          = document.getElementById('date-select');
+  const selectedDate = sel.value;
+  const url          = selectedDate
+    ? `${DATA_BASE}/${selectedDate}.json?t=${Date.now()}`
+    : `${DATA_BASE}/screener_data.json?t=${Date.now()}`;
+
+  showStatus('Loading scan data...');
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`No scan found for ${selectedDate || 'latest'}`);
     const data = await res.json();
 
-    clearInterval(ticker);
-    progFill.style.width = '100%';
-    statusTxt.textContent = `✓ ${data.results.length} stocks passed filters`;
+    hideStatus();
 
-    setTimeout(() => {
-      statusBar.classList.add('hidden');
-      progFill.style.width = '0%';
-    }, 1800);
+    screenerCache = data.results || [];
 
-    screenerCache = data.results;
+    document.getElementById('viewing-date').textContent =
+      data.date ? formatDate(data.date) : '—';
+
     document.getElementById('result-count').textContent =
-      `${data.results.length} stock${data.results.length !== 1 ? 's' : ''} passed filters · ${data.date}`;
+      `${screenerCache.length} stock${screenerCache.length !== 1 ? 's' : ''} passed filters` +
+      (data.date ? ` · ${formatDate(data.date)}` : '');
 
-    renderTable(sortData(screenerCache, currentSort));
-    document.getElementById('screener-results').classList.remove('hidden');
+    if (screenerCache.length > 0) {
+      renderTable(sortData(screenerCache, currentSort));
+      document.getElementById('screener-results').classList.remove('hidden');
+      document.getElementById('screener-empty').classList.add('hidden');
+    } else {
+      document.getElementById('screener-results').classList.add('hidden');
+      document.getElementById('screener-empty').classList.remove('hidden');
+      document.querySelector('.empty-title').textContent =
+        data.date ? 'No stocks passed filters on this date' : 'No scan data yet';
+    }
 
   } catch (err) {
-    clearInterval(ticker);
-    statusTxt.textContent = `Error: ${err.message}`;
-    progFill.style.width = '0%';
-    setTimeout(() => statusBar.classList.add('hidden'), 4000);
+    hideStatus();
+    document.getElementById('screener-results').classList.add('hidden');
     document.getElementById('screener-empty').classList.remove('hidden');
+    document.querySelector('.empty-title').textContent = err.message;
   }
+}
 
-  btn.disabled = false;
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Run Daily Scan`;
+// ── STATUS BAR ────────────────────────────────────────────────────────────────
+function showStatus(msg) {
+  const bar  = document.getElementById('screener-status');
+  const fill = document.getElementById('status-fill');
+  const txt  = document.getElementById('status-text');
+
+  bar.classList.remove('hidden');
+  txt.textContent = msg;
+
+  let p = 0;
+  clearInterval(fill._interval);
+  fill._interval = setInterval(() => {
+    p = Math.min(p + Math.random() * 6, 90);
+    fill.style.width = p + '%';
+  }, 300);
+}
+
+function hideStatus() {
+  const bar  = document.getElementById('screener-status');
+  const fill = document.getElementById('status-fill');
+  clearInterval(fill._interval);
+  fill.style.width = '100%';
+  document.getElementById('status-text').textContent = 'Done';
+  setTimeout(() => {
+    bar.classList.add('hidden');
+    fill.style.width = '0%';
+  }, 600);
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
@@ -138,14 +175,14 @@ function renderTable(rows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="td-rank">${i + 1}</td>
-      <td class="td-ticker-name">
+      <td class="td-ticker">
         <div class="tk">${r.ticker}</div>
         <div class="nm">${r.name}</div>
       </td>
       <td class="td-price">$${r.price.toFixed(2)}</td>
-      <td class="td-score ${scoreColorClass(r.total)}">${r.total}<span style="font-size:11px;font-weight:400;opacity:.45">/100</span></td>
-      <td><span class="grade-badge ${gradeClass(r.grade)}">${r.grade}</span></td>
-      <td class="td-adr"><span class="adr-pill">${r.adr_pct.toFixed(1)}%</span></td>
+      <td class="td-score ${scoreColorClass(r.total)}">${r.total}<span class="denom">/100</span></td>
+      <td><span class="grade ${gradeClass(r.grade)}">${r.grade}</span></td>
+      <td><span class="adr-pill">${r.adr_pct.toFixed(1)}%</span></td>
       <td class="td-vol">$${fmtVol(r.dollar_volume)}</td>
       <td>${miniScore(r.trend.score, 30)}</td>
       <td>${miniScore(r.momentum.score, 25)}</td>
@@ -165,8 +202,10 @@ function miniScore(score, max) {
   const pct = (score / max * 100).toFixed(0);
   const col = barColor(score / max);
   return `
-    <div class="mini-score">
-      <div class="mini-track"><div class="mini-fill" style="width:${pct}%;background:${col}"></div></div>
+    <div class="mini">
+      <div class="mini-track">
+        <div class="mini-fill" style="width:${pct}%;background:${col}"></div>
+      </div>
       <span class="mini-num">${score}</span>
     </div>`;
 }
@@ -186,7 +225,7 @@ async function analyzeStock() {
   result.classList.add('hidden');
 
   try {
-    const res = await fetch(`${API_BASE}/api/rate`, {
+    const res  = await fetch(`${API_BASE}/api/rate`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ ticker }),
@@ -206,10 +245,11 @@ async function analyzeStock() {
   }
 }
 
-// ── CARD BUILDER ──────────────────────────────────────────────────────────────
+// ── ANALYSIS CARD ─────────────────────────────────────────────────────────────
 function buildCard(r) {
   const ringClass = r.total >= 75 ? 'great' : r.total >= 65 ? 'good' : r.total >= 50 ? 'mid' : 'low';
-  const barColor2 = r.total >= 75 ? '#10b981' : r.total >= 50 ? '#f59e0b' : '#ef4444';
+  const barCol    = r.total >= 75 ? '#10b981' : r.total >= 50 ? '#f59e0b' : '#ef4444';
+
   const cats = [
     { key: 'trend',      icon: '📈', label: 'Trend Analysis',          max: 30 },
     { key: 'momentum',   icon: '⚡', label: 'Momentum',                 max: 25 },
@@ -217,14 +257,15 @@ function buildCard(r) {
     { key: 'volume',     icon: '📊', label: 'Volume Behavior',          max: 20 },
   ];
 
-  const adrChip = r.adr_pct       ? `<span class="ac-chip">ADR ${r.adr_pct.toFixed(1)}%</span>` : '';
-  const volChip = r.dollar_volume ? `<span class="ac-chip">$${fmtVol(r.dollar_volume)} Daily Vol</span>` : '';
+  const adrChip = r.adr_pct
+    ? `<span class="ac-chip">ADR ${r.adr_pct.toFixed(1)}%</span>` : '';
+  const volChip = r.dollar_volume
+    ? `<span class="ac-chip">$${fmtVol(r.dollar_volume)} Daily Vol</span>` : '';
 
   const catsHTML = cats.map(c => {
     const d   = r[c.key];
     const pct = (d.score / c.max * 100).toFixed(1);
     const bc  = barColor(d.score / c.max);
-    const bullets = d.conditions.map(s => `<li>${s}</li>`).join('');
     return `
       <div class="cat-panel">
         <div class="cat-top">
@@ -235,15 +276,17 @@ function buildCard(r) {
           <div class="cat-track">
             <div class="cat-fill" style="width:0%;background:${bc}" data-target="${pct}"></div>
           </div>
-          <span class="status-chip chip-${d.status}">${d.status}</span>
+          <span class="chip chip-${d.status}">${d.status}</span>
         </div>
-        <ul class="cat-conditions">${bullets}</ul>
+        <ul class="cat-conditions">
+          ${d.conditions.map(s => `<li>${s}</li>`).join('')}
+        </ul>
       </div>`;
   }).join('');
 
   return `
-    <div class="ac-wrap">
-      <div class="ac-header">
+    <div class="ac">
+      <div class="ac-head">
         <div class="ac-meta">
           <div class="ac-ticker">${r.ticker}</div>
           <div class="ac-name">${r.name}</div>
@@ -258,15 +301,19 @@ function buildCard(r) {
             <span class="score-num">${r.total}</span>
             <span class="score-denom">/100</span>
           </div>
-          <span class="grade-badge ${gradeClass(r.grade)}">${r.grade}</span>
+          <span class="grade ${gradeClass(r.grade)}">${r.grade}</span>
         </div>
       </div>
       <div class="ac-verdict">↳ ${r.verdict}</div>
       <div class="ac-bar-row">
         <div class="ac-bar-track">
-          <div class="ac-bar-fill" style="width:0%;background:linear-gradient(90deg,${barColor2}99,${barColor2})" data-target="${r.total}"></div>
+          <div class="ac-bar-fill"
+               style="width:0%;background:linear-gradient(90deg,${barCol}99,${barCol})"
+               data-target="${r.total}"></div>
         </div>
-        <div class="bar-ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+        <div class="bar-ticks">
+          <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+        </div>
       </div>
       <div class="ac-grid">${catsHTML}</div>
     </div>`;
@@ -276,13 +323,13 @@ function buildCard(r) {
 function openModal(r) {
   const content = document.getElementById('modal-content');
   content.innerHTML = buildCard(r);
-  document.getElementById('analysis-modal').classList.remove('hidden');
+  document.getElementById('modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   setTimeout(() => animateBars(content), 60);
 }
 
 function closeModal() {
-  document.getElementById('analysis-modal').classList.add('hidden');
+  document.getElementById('modal').classList.add('hidden');
   document.body.style.overflow = '';
 }
 
@@ -306,6 +353,14 @@ function sortData(data, key) {
   return [...data].sort((a, b) => map[key](a) - map[key](b));
 }
 
+function formatDate(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  });
+}
+
 function scoreColorClass(s) {
   if (s >= 75) return 'sc-great';
   if (s >= 65) return 'sc-good';
@@ -321,8 +376,7 @@ function barColor(ratio) {
 }
 
 function gradeClass(g) {
-  const map = { 'A+': 'gAplus', 'A': 'gA', 'B': 'gB', 'C': 'gC', 'D': 'gD', 'F': 'gF' };
-  return map[g] || 'gF';
+  return { 'A+': 'gAplus', 'A': 'gA', 'B': 'gB', 'C': 'gC', 'D': 'gD', 'F': 'gF' }[g] || 'gF';
 }
 
 function fmtVol(v) {
