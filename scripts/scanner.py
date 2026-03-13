@@ -40,9 +40,8 @@ YF_HEADERS  = {
 def get_yahoo_universe():
     """
     Pull candidates from Yahoo Finance predefined screeners.
-    Combines most_actives, day_gainers, day_losers, and growth_technology_stocks
-    to capture a broad cross-section of high-activity US equities.
-    Returns a deduplicated list of clean ticker symbols.
+    Only keeps EQUITY (common stock) and ETF quote types.
+    Drops warrants, rights, units, preferred, foreign listings.
     """
     base      = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"
     screeners = [
@@ -58,7 +57,7 @@ def get_yahoo_universe():
 
     for scr in screeners:
         try:
-            res  = requests.get(
+            res = requests.get(
                 base,
                 headers=YF_HEADERS,
                 params={'scrIds': scr, 'count': 250},
@@ -68,11 +67,25 @@ def get_yahoo_universe():
             data   = res.json()
             quotes = data['finance']['result'][0]['quotes']
             before = len(tickers)
+
             for q in quotes:
-                sym = q.get('symbol', '')
-                # Drop ETFs, funds, warrants, foreign listings
-                if sym and '.' not in sym and '^' not in sym and len(sym) <= 5:
+                sym    = q.get('symbol', '')
+                q_type = q.get('quoteType', '')
+
+                if (
+                    sym
+                    and q_type in ('EQUITY', 'ETF')
+                    and '.' not in sym       # drops foreign listings e.g. BRK.B
+                    and '^' not in sym       # drops index tickers
+                    and '-' not in sym       # drops warrants e.g. ACHR-WT
+                    and '+' not in sym       # drops some preferred shares
+                    and not sym.endswith('W')  # drops warrants e.g. IPXXW
+                    and not sym.endswith('R')  # drops rights
+                    and not sym.endswith('U')  # drops units
+                    and len(sym) <= 5
+                ):
                     tickers.add(sym)
+
             print(f"  {scr:<35} +{len(tickers) - before:>3}  (total {len(tickers)})")
         except Exception as e:
             print(f"  {scr:<35} FAILED — {e}")
