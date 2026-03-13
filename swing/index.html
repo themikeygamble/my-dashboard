@@ -11,146 +11,172 @@
 </head>
 <body>
 
-  <header>
-    <a href="../" class="site-name-link">themikeygamble</a>
-    <nav>
-      <a href="../sectors/">📊 Sector Rotation</a>
-      <a href="../breadth/">📈 Nasdaq Breadth</a>
-      <a href="./" class="active">⚡ Swing Scanner</a>
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-logo">
+      <a href="../">
+        <div class="logo-name">themikeygamble</div>
+        <div class="logo-tagline">Market Tools</div>
+      </a>
+    </div>
+
+    <div class="sidebar-section-label">Tools</div>
+
+    <nav class="sidebar-nav">
+      <a href="../sectors/" class="nav-btn">
+        <span class="nav-icon">📊</span>
+        <span>Sector Rotation</span>
+      </a>
+      <a href="../breadth/" class="nav-btn">
+        <span class="nav-icon">📈</span>
+        <span>Nasdaq Breadth</span>
+      </a>
+      <a href="./" class="nav-btn active">
+        <span class="nav-icon">⚡</span>
+        <span>Swing Scanner</span>
+      </a>
     </nav>
-  </header>
 
-  <main>
+    <!-- Sub-nav: Screener vs Rater tabs -->
+    <div class="sidebar-subnav" id="swing-subnav">
+      <button class="subnav-btn active" data-tab="screener">Daily Screener</button>
+      <button class="subnav-btn"        data-tab="rater">Rate a Stock</button>
+    </div>
 
-    <!-- ── SCREENER TAB ── -->
-    <section id="screener-tab" class="tab-panel active">
+    <div class="sidebar-footer">
+      Updates daily<br>Mon–Fri at 4:30 PM ET
+    </div>
 
-      <div class="panel-header">
-        <div class="panel-info">
-          <h2>Daily Swing Scan</h2>
-          <div class="filter-badges">
-            <span class="fbadge">ADR &gt; 5%</span>
-            <span class="fbadge">Daily Vol &gt; $20M</span>
-            <span class="fbadge date-badge" id="scan-date">—</span>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main-wrap">
+    <main>
+
+      <!-- ════ SCREENER TAB ════ -->
+      <section id="screener-tab" class="tab-panel active">
+
+        <div class="panel-header">
+          <div class="panel-info">
+            <h2>Daily Swing Scan</h2>
+            <div class="filter-badges">
+              <span class="fbadge">ADR &gt; 5%</span>
+              <span class="fbadge">Daily Vol &gt; $20M</span>
+              <span class="fbadge date-badge" id="viewing-date">—</span>
+            </div>
           </div>
-        </div>
-        <div class="panel-controls">
-          <div class="tab-nav">
-            <button class="tab-btn active" data-tab="screener">Daily Screener</button>
-            <button class="tab-btn"        data-tab="rater">Rate a Stock</button>
-          </div>
-          <button id="scan-btn" class="btn btn-primary">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            Load Today's Scan
-          </button>
-        </div>
-      </div>
-
-      <div id="screener-status" class="status-bar hidden">
-        <div class="status-inner">
-          <div class="status-track"><div class="status-fill" id="status-fill"></div></div>
-          <span id="status-text">Loading...</span>
-        </div>
-      </div>
-
-      <div id="screener-results" class="hidden">
-        <div class="results-meta">
-          <span id="result-count" class="meta-text"></span>
-          <div class="sort-row">
-            <label for="sort-select">Sort by</label>
-            <select id="sort-select">
-              <option value="score">Score</option>
-              <option value="adr">ADR%</option>
-              <option value="dolvol">Dollar Volume</option>
-              <option value="trend">Trend</option>
-              <option value="momentum">Momentum</option>
-              <option value="volatility">Volatility</option>
-              <option value="volume">Volume</option>
+          <div class="panel-controls">
+            <select id="date-select" class="date-select hidden">
+              <option value="">Loading...</option>
             </select>
+            <button id="scan-btn" class="btn btn-primary">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Load Scan
+            </button>
           </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Ticker</th>
-                <th>Price</th>
-                <th>Score</th>
-                <th>Grade</th>
-                <th>ADR%</th>
-                <th>DolVol</th>
-                <th>Trend<span class="th-max">/30</span></th>
-                <th>Momentum<span class="th-max">/25</span></th>
-                <th>Volatility<span class="th-max">/25</span></th>
-                <th>Volume<span class="th-max">/20</span></th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="screener-body"></tbody>
-          </table>
-        </div>
-      </div>
 
-      <div id="screener-empty" class="empty-state">
-        <div class="empty-icon">📡</div>
-        <p class="empty-title">Load today's scan results</p>
-        <p class="empty-sub">Updated automatically every weekday at 4:30 PM ET · Filters: ADR &gt; 5% &amp; Daily Dollar Volume &gt; $20M</p>
-      </div>
-
-    </section>
-
-    <!-- ── RATER TAB ── -->
-    <section id="rater-tab" class="tab-panel hidden">
-
-      <div class="panel-header">
-        <div class="panel-info">
-          <h2>Rate a Stock</h2>
-          <p class="panel-desc">Enter any ticker for a full multi-factor swing trade breakdown</p>
-        </div>
-        <div class="panel-controls">
-          <div class="tab-nav">
-            <button class="tab-btn" data-tab="screener">Daily Screener</button>
-            <button class="tab-btn active" data-tab="rater">Rate a Stock</button>
+        <div id="screener-status" class="status-bar hidden">
+          <div class="status-inner">
+            <div class="status-track"><div class="status-fill" id="status-fill"></div></div>
+            <span id="status-text">Loading...</span>
           </div>
         </div>
-      </div>
 
-      <div class="rater-input-card">
-        <div class="ticker-row">
-          <input id="ticker-input" type="text" placeholder="Enter ticker — e.g. NVDA"
-                 autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10" />
-          <button id="analyze-btn" class="btn btn-primary">Analyze</button>
+        <div id="screener-results" class="hidden">
+          <div class="results-meta">
+            <span id="result-count" class="meta-text"></span>
+            <div class="sort-row">
+              <label for="sort-select">Sort by</label>
+              <select id="sort-select">
+                <option value="score">Score</option>
+                <option value="adr">ADR%</option>
+                <option value="dolvol">Dollar Volume</option>
+                <option value="trend">Trend</option>
+                <option value="momentum">Momentum</option>
+                <option value="volatility">Volatility</option>
+                <option value="volume">Volume</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Ticker</th>
+                  <th>Price</th>
+                  <th>Score</th>
+                  <th>Grade</th>
+                  <th>ADR%</th>
+                  <th>DolVol</th>
+                  <th>Trend<span class="th-max">/30</span></th>
+                  <th>Momentum<span class="th-max">/25</span></th>
+                  <th>Volatility<span class="th-max">/25</span></th>
+                  <th>Volume<span class="th-max">/20</span></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="screener-body"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="quick-picks">
-          <span class="qp-label">Quick:</span>
-          <button class="qp-btn" data-ticker="NVDA">NVDA</button>
-          <button class="qp-btn" data-ticker="TSLA">TSLA</button>
-          <button class="qp-btn" data-ticker="PLTR">PLTR</button>
-          <button class="qp-btn" data-ticker="MSTR">MSTR</button>
-          <button class="qp-btn" data-ticker="COIN">COIN</button>
-          <button class="qp-btn" data-ticker="AMD">AMD</button>
-          <button class="qp-btn" data-ticker="CRWD">CRWD</button>
+
+        <div id="screener-empty" class="empty-state">
+          <div class="empty-icon">📡</div>
+          <p class="empty-title">No scan data yet</p>
+          <p class="empty-sub">Updated automatically every weekday at 4:30 PM ET · Filters: ADR &gt; 5% &amp; Daily Dollar Volume &gt; $20M</p>
         </div>
-      </div>
 
-      <div id="rater-loading" class="loading-state hidden">
-        <div class="spinner"></div>
-        <p>Analyzing <strong id="loading-ticker"></strong>...</p>
-      </div>
+      </section>
 
-      <div id="rater-error" class="error-banner hidden">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-        </svg>
-        <span id="error-msg"></span>
-      </div>
+      <!-- ════ RATER TAB ════ -->
+      <section id="rater-tab" class="tab-panel hidden">
 
-      <div id="rater-result" class="hidden"></div>
+        <div class="panel-header">
+          <div class="panel-info">
+            <h2>Rate a Stock</h2>
+            <p class="panel-desc">Enter any ticker for a full multi-factor swing trade breakdown</p>
+          </div>
+        </div>
 
-    </section>
+        <div class="rater-input-card">
+          <div class="ticker-row">
+            <input id="ticker-input" type="text" placeholder="Enter ticker — e.g. NVDA"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10" />
+            <button id="analyze-btn" class="btn btn-primary">Analyze</button>
+          </div>
+          <div class="quick-picks">
+            <span class="qp-label">Quick:</span>
+            <button class="qp-btn" data-ticker="NVDA">NVDA</button>
+            <button class="qp-btn" data-ticker="TSLA">TSLA</button>
+            <button class="qp-btn" data-ticker="PLTR">PLTR</button>
+            <button class="qp-btn" data-ticker="MSTR">MSTR</button>
+            <button class="qp-btn" data-ticker="COIN">COIN</button>
+            <button class="qp-btn" data-ticker="AMD">AMD</button>
+            <button class="qp-btn" data-ticker="CRWD">CRWD</button>
+          </div>
+        </div>
 
-  </main>
+        <div id="rater-loading" class="loading-state hidden">
+          <div class="spinner"></div>
+          <p>Analyzing <strong id="loading-ticker"></strong>...</p>
+        </div>
+
+        <div id="rater-error" class="error-banner hidden">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <span id="error-msg"></span>
+        </div>
+
+        <div id="rater-result" class="hidden"></div>
+
+      </section>
+
+    </main>
+  </div>
 
   <!-- ── MODAL ── -->
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
