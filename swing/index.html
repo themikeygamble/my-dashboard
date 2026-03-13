@@ -11,12 +11,11 @@
 </head>
 <body>
 
-  <!-- ── HEADER ── -->
   <header>
     <a href="../" class="site-name-link">themikeygamble</a>
     <nav>
       <a href="../sectors/">📊 Sector Rotation</a>
-      <a href="../breadth/">📈 US Market Breadth</a>
+      <a href="../breadth/">📈 Nasdaq Breadth</a>
       <a href="./" class="active">⚡ Swing Scanner</a>
     </nav>
     <div class="header-tabs">
@@ -25,12 +24,10 @@
     </div>
   </header>
 
-  <!-- ── MAIN ── -->
   <main>
 
-    <!-- ════ SCREENER TAB ════ -->
+    <!-- ════ SCREENER ════ -->
     <section id="screener-tab" class="tab-panel active">
-
       <div class="panel-header">
         <div class="panel-info">
           <h2>Daily Swing Scan</h2>
@@ -41,9 +38,7 @@
           </div>
         </div>
         <div class="panel-controls">
-          <select id="date-select" class="date-select hidden">
-            <option value="">Loading...</option>
-          </select>
+          <select id="date-select" class="date-select hidden"><option value="">Loading...</option></select>
           <button id="scan-btn" class="btn btn-primary">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             Load Scan
@@ -71,6 +66,8 @@
               <option value="momentum">Momentum</option>
               <option value="volatility">Volatility</option>
               <option value="volume">Volume</option>
+              <option value="rs_spy">RS vs SPY</option>
+              <option value="price_structure">Price Structure</option>
             </select>
           </div>
         </div>
@@ -85,10 +82,12 @@
                 <th>Grade</th>
                 <th>ADR%</th>
                 <th>DolVol</th>
-                <th>Trend<span class="th-max">/30</span></th>
-                <th>Momentum<span class="th-max">/25</span></th>
-                <th>Volatility<span class="th-max">/25</span></th>
-                <th>Volume<span class="th-max">/20</span></th>
+                <th>Trend<span class="th-max">/25</span></th>
+                <th>Momentum<span class="th-max">/20</span></th>
+                <th>Volatility<span class="th-max">/15</span></th>
+                <th>Volume<span class="th-max">/15</span></th>
+                <th>RS SPY<span class="th-max">/15</span></th>
+                <th>Price<span class="th-max">/10</span></th>
                 <th></th>
               </tr>
             </thead>
@@ -100,18 +99,16 @@
       <div id="screener-empty" class="empty-state">
         <div class="empty-icon">📡</div>
         <p class="empty-title">No scan data yet</p>
-        <p class="empty-sub">Updated automatically every weekday at 4:30 PM ET · Filters: ADR &gt; 5% &amp; Daily Dollar Volume &gt; $20M</p>
+        <p class="empty-sub">Filters: ADR &gt; 5% &amp; Daily Dollar Volume &gt; $20M</p>
       </div>
-
     </section>
 
-    <!-- ════ RATER TAB ════ -->
+    <!-- ════ RATER ════ -->
     <section id="rater-tab" class="tab-panel hidden">
-
       <div class="panel-header">
         <div class="panel-info">
           <h2>Rate a Stock</h2>
-          <p class="panel-desc">Enter any ticker for a full multi-factor swing trade breakdown</p>
+          <p class="panel-desc">Full 6-category multi-factor swing trade analysis</p>
         </div>
       </div>
 
@@ -146,19 +143,16 @@
       </div>
 
       <div id="rater-result" class="hidden"></div>
-
     </section>
 
   </main>
 
-  <!-- ── MODAL ── -->
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-backdrop"></div>
     <div class="modal-box">
       <button class="modal-close" aria-label="Close">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
       <div id="modal-content"></div>
@@ -168,4 +162,3 @@
   <script src="./app.js"></script>
 </body>
 </html>
-
