@@ -7,7 +7,7 @@
 }
 
 :root {
-  --bg: #0d1117;
+  --bg: #07090f;
   --panel: #161b22;
   --panel-2: #101723;
   --panel-3: #0f1722;
@@ -48,8 +48,8 @@ header {
   align-items: center;
   gap: 16px;
   padding: 12px 24px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: #0c1018;
+  border-bottom: 1px solid #1c2740;
 }
 
 .site-name-link {
@@ -583,3 +583,4 @@ tbody td:first-child {
     padding: 9px 10px;
   }
 }
+
