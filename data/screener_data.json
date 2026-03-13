@@ -1,0 +1,11 @@
+{
+  "date": null,
+  "count": 0,
+  "universe": 0,
+  "candidates": 0,
+  "filters": {
+    "adr_min": 5.0,
+    "vol_min": 20000000
+  },
+  "results": []
+}
