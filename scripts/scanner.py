@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
 scripts/scanner.py
-Daily swing trade screener — runs via GitHub Actions
-Filters: ADR > 5%, Daily Dollar Volume > $20M
-Outputs: data/screener_data.json
+Dynamic swing trade screener — no hardcoded universe.
+Pipeline:
+  1. Pull high-volume US equities from Yahoo Finance screener endpoints
+  2. Pre-filter: ADR > 5% AND dollar volume > $20M (fast, 20d data)
+  3. Full multi-factor analysis on passing candidates
 """
 
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import requests
 import json
 import os
 import warnings
@@ -17,21 +20,103 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 warnings.filterwarnings('ignore')
 
-OUTPUT_FILE  = "data/screener_data.json"
-ADR_MIN      = 5.0
-VOL_MIN      = 20_000_000
+TODAY       = str(date.today())
+DATA_DIR    = "data"
+LATEST_FILE = f"{DATA_DIR}/screener_data.json"
+DATED_FILE  = f"{DATA_DIR}/{TODAY}.json"
+INDEX_FILE  = f"{DATA_DIR}/index.json"
+ADR_MIN     = 5.0
+VOL_MIN     = 20_000_000
 
-UNIVERSE = [
-    "NVDA", "AMD",  "AVGO", "SMCI", "ARM",  "TSM",  "AEHR", "MRVL",
-    "MSTR", "COIN", "HOOD", "MARA", "RIOT", "CLSK", "CIFR", "HUT",
-    "META", "TSLA", "PLTR", "SOFI", "UPST", "CRWD", "NET",  "DDOG", "AXON",
-    "IONQ", "RGTI", "QUBT", "QBTS", "ARQQ",
-    "ACHR", "JOBY", "RKLB", "LUNR", "BLNK",
-    "SNOW", "BILL", "RBLX", "SHOP", "U",    "CELH",
-    "BABA", "JD",   "PDD",
-    "GME",  "SOUN", "BBAI", "CLOV",
-]
+YF_HEADERS  = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+}
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 1 — GET UNIVERSE FROM YAHOO FINANCE SCREENER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_yahoo_universe():
+    """
+    Pull candidates from Yahoo Finance predefined screeners.
+    Combines most_actives, day_gainers, day_losers, and growth_technology_stocks
+    to capture a broad cross-section of high-activity US equities.
+    Returns a deduplicated list of clean ticker symbols.
+    """
+    base      = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"
+    screeners = [
+        'most_actives',
+        'day_gainers',
+        'day_losers',
+        'growth_technology_stocks',
+        'small_cap_gainers',
+        'aggressive_small_caps',
+    ]
+
+    tickers = set()
+
+    for scr in screeners:
+        try:
+            res  = requests.get(
+                base,
+                headers=YF_HEADERS,
+                params={'scrIds': scr, 'count': 250},
+                timeout=15,
+            )
+            res.raise_for_status()
+            data   = res.json()
+            quotes = data['finance']['result'][0]['quotes']
+            before = len(tickers)
+            for q in quotes:
+                sym = q.get('symbol', '')
+                # Drop ETFs, funds, warrants, foreign listings
+                if sym and '.' not in sym and '^' not in sym and len(sym) <= 5:
+                    tickers.add(sym)
+            print(f"  {scr:<35} +{len(tickers) - before:>3}  (total {len(tickers)})")
+        except Exception as e:
+            print(f"  {scr:<35} FAILED — {e}")
+
+    return sorted(tickers)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 2 — PRE-FILTER BY ADR AND DOLLAR VOLUME
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def pre_filter(tickers, adr_min, vol_min, max_workers=20):
+    """
+    Fast pre-filter using only 20 days of data.
+    Only tickers passing BOTH criteria proceed to full analysis.
+    """
+
+    def check(ticker):
+        try:
+            df = yf.Ticker(ticker).history(period="25d", auto_adjust=True)
+            if len(df) < 10:
+                return None
+            adr    = ((df['High'] - df['Low']) / df['Close'] * 100).mean()
+            dolvol = (df['Close'] * df['Volume']).tail(10).mean()
+            if adr >= adr_min and float(dolvol) >= vol_min:
+                return ticker
+        except Exception:
+            pass
+        return None
+
+    passing = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(check, t): t for t in tickers}
+        for fut in as_completed(futures):
+            result = fut.result()
+            if result:
+                passing.append(result)
+
+    return sorted(passing)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 3 — FULL MULTI-FACTOR ANALYZER
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class SwingTradeAnalyzer:
 
@@ -47,37 +132,32 @@ class SwingTradeAnalyzer:
 
     def calculate_indicators(self, df):
         c, h, l = df['Close'], df['High'], df['Low']
-
         for n in [10, 20, 50, 200]:
-            df[f'SMA{n}'] = c.rolling(n).mean()
-
-        delta        = c.diff()
-        gain         = delta.clip(lower=0).rolling(14).mean()
-        loss         = (-delta.clip(upper=0)).rolling(14).mean()
-        df['RSI']    = 100 - (100 / (1 + gain / loss))
-
-        ema12             = c.ewm(span=12, adjust=False).mean()
-        ema26             = c.ewm(span=26, adjust=False).mean()
-        df['MACD']        = ema12 - ema26
-        df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-        df['MACD_Hist']   = df['MACD'] - df['MACD_Signal']
-
-        bb_mid         = c.rolling(20).mean()
-        bb_std         = c.rolling(20).std()
-        df['BB_Upper'] = bb_mid + 2 * bb_std
-        df['BB_Lower'] = bb_mid - 2 * bb_std
-        df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / bb_mid
-
-        tr             = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()], axis=1).max(axis=1)
-        df['ATR']      = tr.rolling(14).mean()
-        df['ATR_Pct']  = df['ATR'] / c * 100
-        df['Vol_MA20'] = df['Volume'].rolling(20).mean()
+            df[f'SMA{n}']     = c.rolling(n).mean()
+        delta                 = c.diff()
+        gain                  = delta.clip(lower=0).rolling(14).mean()
+        loss                  = (-delta.clip(upper=0)).rolling(14).mean()
+        df['RSI']             = 100 - (100 / (1 + gain / loss))
+        ema12                 = c.ewm(span=12, adjust=False).mean()
+        ema26                 = c.ewm(span=26, adjust=False).mean()
+        df['MACD']            = ema12 - ema26
+        df['MACD_Signal']     = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_Hist']       = df['MACD'] - df['MACD_Signal']
+        bb_mid                = c.rolling(20).mean()
+        bb_std                = c.rolling(20).std()
+        df['BB_Upper']        = bb_mid + 2 * bb_std
+        df['BB_Lower']        = bb_mid - 2 * bb_std
+        df['BB_Width']        = (df['BB_Upper'] - df['BB_Lower']) / bb_mid
+        tr                    = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()], axis=1).max(axis=1)
+        df['ATR']             = tr.rolling(14).mean()
+        df['ATR_Pct']         = df['ATR'] / c * 100
+        df['Vol_MA20']        = df['Volume'].rolling(20).mean()
         return df
 
     def compute_adr_and_dolvol(self, df):
-        adr     = ((df['High'] - df['Low']) / df['Close'] * 100).tail(20).mean()
-        dol_vol = (df['Close'] * df['Volume']).tail(10).mean()
-        return round(float(adr), 2), round(float(dol_vol), 0)
+        adr    = ((df['High'] - df['Low']) / df['Close'] * 100).tail(20).mean()
+        dolvol = (df['Close'] * df['Volume']).tail(10).mean()
+        return round(float(adr), 2), round(float(dolvol), 0)
 
     def analyze_trend(self, df):
         row    = df.dropna(subset=['SMA10', 'SMA20', 'SMA50']).iloc[-1]
@@ -88,9 +168,8 @@ class SwingTradeAnalyzer:
         sma200 = float(row['SMA200']) if not pd.isna(row['SMA200']) else None
         score, conditions, status = 0, [], "NEUTRAL"
 
-        checks  = [price > sma10, price > sma20, price > sma50]
-        if sma200:
-            checks.append(price > sma200)
+        checks = [price > sma10, price > sma20, price > sma50]
+        if sma200: checks.append(price > sma200)
         n_above, total = sum(checks), len(checks)
 
         if n_above == total:
@@ -110,17 +189,13 @@ class SwingTradeAnalyzer:
             conditions.append("Price is below all key SMAs — bearish or early-stage base building")
 
         stacked = sma10 > sma20 > sma50
-        if sma200:
-            stacked = stacked and sma50 > sma200
+        if sma200: stacked = stacked and sma50 > sma200
 
         def slope(col, n):
             s = df[col].dropna()
             return float((s.iloc[-1] - s.iloc[-n]) / s.iloc[-n] * 100) if len(s) >= n else 0.0
 
-        s10       = slope('SMA10', 5)
-        s20       = slope('SMA20', 5)
-        s50       = slope('SMA50', 10)
-        slopes_up = s10 > 0 and s20 > 0 and s50 > 0
+        slopes_up = slope('SMA10', 5) > 0 and slope('SMA20', 5) > 0 and slope('SMA50', 10) > 0
 
         if stacked and slopes_up:
             score += 10; status = "SUPPORTIVE"
@@ -131,7 +206,7 @@ class SwingTradeAnalyzer:
             if status != "SUPPORTIVE": status = "SUPPORTIVE"
         elif sma10 > sma20 > sma50:
             score += 5
-            conditions.append("Short-term MAs (10>20>50) stacked bullishly but longer-term alignment is mixed — emerging trend")
+            conditions.append("Short-term MAs (10>20>50) stacked bullishly but longer-term alignment is mixed")
         elif slopes_up:
             score += 3
             conditions.append("MAs not fully stacked but all rising — trend turning, not yet fully ordered")
@@ -267,19 +342,16 @@ class SwingTradeAnalyzer:
     def analyze_volatility(self, df):
         clean    = df.dropna(subset=['BB_Width', 'ATR_Pct'])
         score, conditions, status = 0, [], "NEUTRAL"
-
         bb_now   = float(clean['BB_Width'].iloc[-1])
         bb_60d   = float(clean['BB_Width'].tail(60).mean())
         bb_ratio = bb_now / bb_60d if bb_60d > 0 else 1.0
-
-        atr5  = float(clean['ATR_Pct'].tail(5).mean())
-        atr60 = float(clean['ATR_Pct'].tail(60).mean())
-        atr_r = atr5 / atr60 if atr60 > 0 else 1.0
-
-        rng   = (df['High'] - df['Low']).tail(20) / df['Close'].tail(20) * 100
-        r5    = float(rng.tail(5).mean())
-        r20   = float(rng.mean())
-        rng_r = r5 / r20 if r20 > 0 else 1.0
+        atr5     = float(clean['ATR_Pct'].tail(5).mean())
+        atr60    = float(clean['ATR_Pct'].tail(60).mean())
+        atr_r    = atr5 / atr60 if atr60 > 0 else 1.0
+        rng      = (df['High'] - df['Low']).tail(20) / df['Close'].tail(20) * 100
+        r5       = float(rng.tail(5).mean())
+        r20      = float(rng.mean())
+        rng_r    = r5 / r20 if r20 > 0 else 1.0
 
         if bb_ratio < 0.55:
             score += 9; status = "SUPPORTIVE"
@@ -418,11 +490,14 @@ class SwingTradeAnalyzer:
 
     def rate_stock(self, ticker):
         df = self.fetch_data(ticker)
-        if df is None:
-            return None
+        if df is None: return None
         df = self.calculate_indicators(df)
 
         adr_pct, dollar_volume = self.compute_adr_and_dolvol(df)
+
+        # Hard enforce filters again on full 1y data
+        if adr_pct < ADR_MIN or dollar_volume < VOL_MIN:
+            return None
 
         trend      = self.analyze_trend(df)
         momentum   = self.analyze_momentum(df)
@@ -458,38 +533,100 @@ class SwingTradeAnalyzer:
         }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# INDEX
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def update_index(new_date):
+    if os.path.exists(INDEX_FILE):
+        with open(INDEX_FILE) as f:
+            idx = json.load(f)
+    else:
+        idx = {'dates': []}
+
+    idx['dates'] = sorted(set(idx['dates'] + [new_date]), reverse=True)
+    idx['latest'] = idx['dates'][0]
+
+    with open(INDEX_FILE, 'w') as f:
+        json.dump(idx, f)
+
+    print(f"Index updated — {len(idx['dates'])} scan day(s) on record")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def main():
+    print(f"{'='*60}")
+    print(f"  SwingScan  |  {TODAY}  |  ADR>{ADR_MIN}%  Vol>${VOL_MIN/1e6:.0f}M")
+    print(f"{'='*60}\n")
+
+    # ── Step 1 ──
+    print("STEP 1 — Fetching universe from Yahoo Finance screeners...")
+    universe = get_yahoo_universe()
+    print(f"  → {len(universe)} candidate tickers found\n")
+
+    if not universe:
+        print("No universe returned — aborting. Yahoo Finance may be rate-limiting.")
+        return
+
+    # ── Step 2 ──
+    print(f"STEP 2 — Pre-filtering {len(universe)} tickers (ADR + DolVol, 20d data)...")
+    candidates = pre_filter(universe, ADR_MIN, VOL_MIN, max_workers=20)
+    print(f"  → {len(candidates)} tickers passed pre-filter\n")
+
+    if not candidates:
+        print("No candidates passed pre-filter.")
+        return
+
+    print(f"  Candidates: {', '.join(candidates)}\n")
+
+    # ── Step 3 ──
+    print(f"STEP 3 — Full analysis on {len(candidates)} candidates...")
     analyzer = SwingTradeAnalyzer()
     results  = []
 
-    print(f"Scanning {len(UNIVERSE)} tickers  |  ADR > {ADR_MIN}%  |  Vol > ${VOL_MIN/1e6:.0f}M")
-
     with ThreadPoolExecutor(max_workers=10) as ex:
-        futures = {ex.submit(analyzer.rate_stock, t): t for t in UNIVERSE}
+        futures = {ex.submit(analyzer.rate_stock, t): t for t in candidates}
         for i, fut in enumerate(as_completed(futures), 1):
             t = futures[fut]
             try:
                 r = fut.result()
-                if r and r['adr_pct'] >= ADR_MIN and r['dollar_volume'] >= VOL_MIN:
+                if r:
                     results.append(r)
-                    print(f"  [{i:>2}/{len(UNIVERSE)}] PASS  {t:<6}  {r['total']}/100 [{r['grade']}]  ADR {r['adr_pct']:.1f}%  Vol ${r['dollar_volume']/1e6:.0f}M")
+                    print(f"  [{i:>2}/{len(candidates)}] PASS  {t:<6}  {r['total']}/100 [{r['grade']}]  ADR {r['adr_pct']:.1f}%  Vol ${r['dollar_volume']/1e6:.0f}M")
                 else:
-                    print(f"  [{i:>2}/{len(UNIVERSE)}] skip  {t}")
+                    print(f"  [{i:>2}/{len(candidates)}] skip  {t}  (filtered on 1y re-check)")
             except Exception as e:
-                print(f"  [{i:>2}/{len(UNIVERSE)}] ERR   {t}  —  {e}")
+                print(f"  [{i:>2}/{len(candidates)}] ERR   {t}  —  {e}")
 
     results.sort(key=lambda x: x['total'], reverse=True)
 
-    os.makedirs("data", exist_ok=True)
-    with open(OUTPUT_FILE, 'w') as f:
-        json.dump({
-            'date':    str(date.today()),
-            'count':   len(results),
-            'filters': {'adr_min': ADR_MIN, 'vol_min': VOL_MIN},
-            'results': results,
-        }, f)
+    payload = {
+        'date':       TODAY,
+        'count':      len(results),
+        'universe':   len(universe),
+        'candidates': len(candidates),
+        'filters':    {'adr_min': ADR_MIN, 'vol_min': VOL_MIN},
+        'results':    results,
+    }
 
-    print(f"\nDone — {len(results)} stocks passed filters → saved to {OUTPUT_FILE}")
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    with open(DATED_FILE, 'w') as f:
+        json.dump(payload, f)
+
+    with open(LATEST_FILE, 'w') as f:
+        json.dump(payload, f)
+
+    update_index(TODAY)
+
+    print(f"\n{'='*60}")
+    print(f"  Done — {len(results)} stocks passed all filters")
+    print(f"  Scanned {len(universe)} → pre-filtered to {len(candidates)} → scored {len(results)}")
+    print(f"  Saved to {DATED_FILE}")
+    print(f"{'='*60}")
 
 
 if __name__ == '__main__':
