@@ -2,8 +2,11 @@ name: Daily Swing Scan
 
 on:
   schedule:
-    - cron: '30 21 * * 1-5'  # 4:30 PM ET, Mon–Fri
-  workflow_dispatch:           # manual trigger from GitHub Actions tab
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write        # ← THIS was missing, causes exit 128
 
 jobs:
   scan:
@@ -31,3 +34,5 @@ jobs:
           git add data/screener_data.json
           git diff --cached --quiet || git commit -m "Swing scan $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # ← THIS was missing too
