@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════
    SwingScan — app.js
+   Qullamaggie Breakout Screener
 ═══════════════════════════════════════ */
 
 const API_BASE  = 'https://swingscan.onrender.com';
@@ -9,12 +10,12 @@ let screenerCache = [];
 let currentSort   = 'score';
 
 const CATEGORIES = [
-  { key: 'trend',           label: 'Trend',          max: 25, icon: '📈' },
-  { key: 'momentum',        label: 'Momentum',        max: 20, icon: '⚡' },
-  { key: 'volatility',      label: 'Volatility',      max: 15, icon: '🔥' },
-  { key: 'volume',          label: 'Volume',          max: 15, icon: '📊' },
-  { key: 'rs_spy',          label: 'RS vs SPY',       max: 15, icon: '🆚' },
-  { key: 'price_structure', label: 'Price Structure', max: 10, icon: '🏔' },
+  { key: 'prior_move',    label: 'Prior Move',         max: 25, icon: '🚀' },
+  { key: 'consolidation', label: 'Consolidation',      max: 20, icon: '🔒' },
+  { key: 'ma_surf',       label: 'MA Surf',            max: 15, icon: '🏄' },
+  { key: 'br_ready',      label: 'Breakout Readiness', max: 15, icon: '🎯' },
+  { key: 'vol_sig',       label: 'Volume Signature',   max: 15, icon: '📊' },
+  { key: 'rel_str',       label: 'Relative Strength',  max: 10, icon: '💪' },
 ];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
@@ -129,15 +130,15 @@ async function loadScan() {
 function sortData(data) {
   return [...data].sort((a, b) => {
     switch (currentSort) {
-      case 'trend':           return b.trend.score           - a.trend.score;
-      case 'momentum':        return b.momentum.score        - a.momentum.score;
-      case 'volatility':      return b.volatility.score      - a.volatility.score;
-      case 'volume':          return b.volume.score          - a.volume.score;
-      case 'rs_spy':          return b.rs_spy.score          - a.rs_spy.score;
-      case 'price_structure': return b.price_structure.score - a.price_structure.score;
-      case 'adr':             return b.adr_pct               - a.adr_pct;
-      case 'dolvol':          return b.dollar_volume         - a.dollar_volume;
-      default:                return b.total                 - a.total;
+      case 'prior_move':    return b.prior_move.score    - a.prior_move.score;
+      case 'consolidation': return b.consolidation.score - a.consolidation.score;
+      case 'ma_surf':       return b.ma_surf.score       - a.ma_surf.score;
+      case 'br_ready':      return b.br_ready.score      - a.br_ready.score;
+      case 'vol_sig':       return b.vol_sig.score       - a.vol_sig.score;
+      case 'rel_str':       return b.rel_str.score       - a.rel_str.score;
+      case 'adr':           return b.adr_pct             - a.adr_pct;
+      case 'dolvol':        return b.dollar_volume       - a.dollar_volume;
+      default:              return b.total               - a.total;
     }
   });
 }
@@ -161,21 +162,22 @@ function renderTable(data) {
       <td><span class="grade ${gradeClass(r.grade)}">${r.grade}</span></td>
       <td><span class="adr-pill">${r.adr_pct.toFixed(1)}%</span></td>
       <td class="td-vol">${formatDolVol(r.dollar_volume)}</td>
-      <td>${miniBar(r.trend.score,           25)}</td>
-      <td>${miniBar(r.momentum.score,        20)}</td>
-      <td>${miniBar(r.volatility.score,      15)}</td>
-      <td>${miniBar(r.volume.score,          15)}</td>
-      <td>${miniBar(r.rs_spy.score,          15)}</td>
-      <td>${miniBar(r.price_structure.score, 10)}</td>
+      <td>${miniBar(r.prior_move.score,    25)}</td>
+      <td>${miniBar(r.consolidation.score, 20)}</td>
+      <td>${miniBar(r.ma_surf.score,       15)}</td>
+      <td>${miniBar(r.br_ready.score,      15)}</td>
+      <td>${miniBar(r.vol_sig.score,       15)}</td>
+      <td>${miniBar(r.rel_str.score,       10)}</td>
       <td>
         <button class="expand-btn" data-ticker="${r.ticker}">Details →</button>
       </td>
     `;
 
-    tr.querySelector('.expand-btn').addEventListener('click', () => openModal(r));
-    tr.addEventListener('click', e => {
-      if (!e.target.classList.contains('expand-btn')) openModal(r);
+    tr.querySelector('.expand-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      openModal(r);
     });
+    tr.addEventListener('click', () => openModal(r));
 
     tbody.appendChild(tr);
   });
@@ -232,12 +234,11 @@ function closeModal() {
 
 // ── BUILD ANALYSIS CARD ───────────────────────────────────────────────────────
 function buildAnalysisCard(r) {
-  const pct        = r.total / 100;
-  const ringClass  = pct >= 0.75 ? 'great' : pct >= 0.50 ? 'mid' : 'low';
-  const barColour  = pct >= 0.75 ? '#10b981' : pct >= 0.50 ? '#f59e0b' : '#ef4444';
-  const barWidth   = Math.round(pct * 100);
+  const pct       = r.total / 100;
+  const ringClass = pct >= 0.75 ? 'great' : pct >= 0.50 ? 'mid' : 'low';
+  const barColour = pct >= 0.75 ? '#10b981' : pct >= 0.50 ? '#f59e0b' : '#ef4444';
+  const barWidth  = Math.round(pct * 100);
 
-  // ── Header
   let html = `
     <div class="ac">
       <div class="ac-head">
@@ -276,10 +277,24 @@ function buildAnalysisCard(r) {
       <div class="ac-grid">
   `;
 
-  // ── Category panels
   CATEGORIES.forEach(cat => {
-    const d       = r[cat.key];
-    if (!d) return;
+    const d = r[cat.key];
+
+    if (!d) {
+      html += `
+        <div class="cat-panel" style="opacity:0.35;">
+          <div class="cat-top">
+            <div class="cat-title"><span>${cat.icon}</span><span>${cat.label}</span></div>
+            <div class="cat-pts">—/${cat.max}</div>
+          </div>
+          <ul class="cat-conditions">
+            <li>Data unavailable — redeploy api_server.py</li>
+          </ul>
+        </div>
+      `;
+      return;
+    }
+
     const catPct  = d.score / cat.max;
     const fillClr = catPct >= 0.65 ? '#10b981' : catPct >= 0.35 ? '#f59e0b' : '#ef4444';
     const fillW   = Math.round(catPct * 100);
@@ -306,18 +321,13 @@ function buildAnalysisCard(r) {
     `;
   });
 
-  html += `
-      </div>
-    </div>
-  `;
-
+  html += `</div></div>`;
   return html;
 }
 
 // ── STATUS BAR ────────────────────────────────────────────────────────────────
 function showStatus(msg) {
-  const bar = document.getElementById('screener-status');
-  bar.classList.remove('hidden');
+  document.getElementById('screener-status').classList.remove('hidden');
   document.getElementById('status-text').textContent = msg;
   document.getElementById('status-fill').style.width = '40%';
 }
@@ -337,7 +347,7 @@ function miniBar(score, max) {
   return `
     <div class="mini">
       <div class="mini-track">
-        <div class="mini-fill" style="width:${Math.round(pct*100)}%;background:${clr};"></div>
+        <div class="mini-fill" style="width:${Math.round(pct * 100)}%;background:${clr};"></div>
       </div>
       <span class="mini-num">${score}</span>
     </div>
@@ -346,8 +356,8 @@ function miniBar(score, max) {
 
 function totalScoreClass(score) {
   if (score >= 75) return 'sc-great';
-  if (score >= 65) return 'sc-good';
-  if (score >= 50) return 'sc-mid';
+  if (score >= 62) return 'sc-good';
+  if (score >= 48) return 'sc-mid';
   return 'sc-low';
 }
 
