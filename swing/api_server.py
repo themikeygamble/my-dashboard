@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 swing/api_server.py
-Swing trade rater API — deployed on Render
-Root directory: swing
-Start command:  uvicorn api_server:app --host 0.0.0.0 --port 8000
+Qullamaggie Breakout Rater API — deployed on Render
+Start command: uvicorn api_server:app --host 0.0.0.0 --port 8000
+
+Scoring: PriorMove(25) + Consolidation(20) + MASurf(15) + BreakoutReadiness(15)
+         + VolumeSignature(15) + RelativeStrength(10) = 100
 """
 
 from fastapi import FastAPI, Request
@@ -23,12 +25,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ADR_MIN = 5.0
+VOL_MIN = 20_000_000
 
-class SwingTradeAnalyzer:
 
+class BreakoutAnalyzer:
+
+    # ── DATA ──────────────────────────────────────────────────────────────────
     def fetch_data(self, ticker):
         try:
-            df = yf.Ticker(ticker).history(period="1y", auto_adjust=True)
+            df = yf.Ticker(ticker).history(period="2y", auto_adjust=True)
             if len(df) < 60:
                 return None
             df.index = pd.to_datetime(df.index)
@@ -38,27 +44,8 @@ class SwingTradeAnalyzer:
 
     def calculate_indicators(self, df):
         c, h, l = df['Close'], df['High'], df['Low']
-
         for n in [10, 20, 50, 200]:
             df[f'SMA{n}'] = c.rolling(n).mean()
-
-        delta             = c.diff()
-        gain              = delta.clip(lower=0).rolling(14).mean()
-        loss              = (-delta.clip(upper=0)).rolling(14).mean()
-        df['RSI']         = 100 - (100 / (1 + gain / loss))
-
-        ema12             = c.ewm(span=12, adjust=False).mean()
-        ema26             = c.ewm(span=26, adjust=False).mean()
-        df['MACD']        = ema12 - ema26
-        df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-        df['MACD_Hist']   = df['MACD'] - df['MACD_Signal']
-
-        bb_mid         = c.rolling(20).mean()
-        bb_std         = c.rolling(20).std()
-        df['BB_Upper'] = bb_mid + 2 * bb_std
-        df['BB_Lower'] = bb_mid - 2 * bb_std
-        df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / bb_mid
-
         tr             = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()], axis=1).max(axis=1)
         df['ATR']      = tr.rolling(14).mean()
         df['ATR_Pct']  = df['ATR'] / c * 100
@@ -66,344 +53,392 @@ class SwingTradeAnalyzer:
         return df
 
     def compute_adr_and_dolvol(self, df):
-        adr     = ((df['High'] - df['Low']) / df['Close'] * 100).tail(20).mean()
-        dol_vol = (df['Close'] * df['Volume']).tail(10).mean()
-        return round(float(adr), 2), round(float(dol_vol), 0)
+        adr    = ((df['High'] - df['Low']) / df['Close'] * 100).tail(20).mean()
+        dolvol = (df['Close'] * df['Volume']).tail(10).mean()
+        return round(float(adr), 2), round(float(dolvol), 0)
 
-    def analyze_trend(self, df):
-        row    = df.dropna(subset=['SMA10', 'SMA20', 'SMA50']).iloc[-1]
-        price  = float(row['Close'])
-        sma10  = float(row['SMA10'])
-        sma20  = float(row['SMA20'])
-        sma50  = float(row['SMA50'])
-        sma200 = float(row['SMA200']) if not pd.isna(row['SMA200']) else None
-        score, conditions, status = 0, [], "NEUTRAL"
+    # ── 1. PRIOR MOVE / FLAGPOLE (25 pts) ────────────────────────────────────
+    def analyze_prior_move(self, df):
+        score, conditions = 0, []
+        c = df['Close']
 
-        checks = [price > sma10, price > sma20, price > sma50]
-        if sma200:
-            checks.append(price > sma200)
-        n_above, total = sum(checks), len(checks)
-
-        if n_above == total:
-            score += 10; status = "SUPPORTIVE"
-            conditions.append(f"Price is above all {total} key SMAs (10/20/50/200) — strong bullish positioning")
-        elif n_above >= total - 1:
-            score += 7; status = "SUPPORTIVE"
-            conditions.append(f"Price is above {n_above}/{total} key SMAs — mostly bullish, minor lag on one average")
-        elif n_above == 2:
-            score += 4
-            conditions.append(f"Price is above {n_above}/{total} key SMAs — mixed trend, no clear directional bias")
-        elif n_above == 1:
-            score += 2; status = "UNSUPPORTIVE"
-            conditions.append(f"Price is above only {n_above}/{total} SMAs — below most key levels")
+        ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21]) - 1) * 100 if len(c) >= 21 else 0
+        if ret_1m > 50:
+            score += 10
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — explosive flagpole, top-tier momentum")
+        elif ret_1m > 30:
+            score += 8
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — strong flagpole, clear prior move")
+        elif ret_1m > 20:
+            score += 5
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — solid move, moderate flagpole")
+        elif ret_1m > 10:
+            score += 3
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — mild move, weak flagpole")
         else:
-            score += 0; status = "UNSUPPORTIVE"
-            conditions.append("Price is below all key SMAs — bearish or early-stage base building")
+            score += 0
+            conditions.append(f"1-month return: {ret_1m:.1f}% — no meaningful prior move")
 
-        stacked = sma10 > sma20 > sma50
-        if sma200:
-            stacked = stacked and sma50 > sma200
+        recent     = c.tail(21)
+        low_idx    = int(recent.values.argmin())
+        high_idx   = int(recent.values.argmax())
+        days_taken = abs(high_idx - low_idx)
+
+        if ret_1m > 10:
+            if days_taken <= 7:
+                score += 8
+                conditions.append(f"Move completed in {days_taken} sessions — sharp, impulsive flagpole")
+            elif days_taken <= 14:
+                score += 5
+                conditions.append(f"Move took {days_taken} sessions — reasonably sharp flagpole")
+            else:
+                score += 2
+                conditions.append(f"Move took {days_taken} sessions — slow grind, not ideal flagpole character")
+        else:
+            score += 0
+            conditions.append("No significant move to measure sharpness")
+
+        gap     = (df['Open'] / df['Close'].shift(1) - 1) * 100
+        max_gap = float(gap.tail(30).max())
+        body    = (df['Close'] - df['Open']).abs()
+        atr_v   = df['ATR'].dropna()
+        vol_v   = df['Vol_MA20'].dropna()
+
+        if len(atr_v) > 0 and len(vol_v) > 0:
+            surge_days = (
+                (body > 2 * df['ATR']) &
+                (df['Volume'] > 1.8 * df['Vol_MA20']) &
+                (df['Close'] > df['Open'])
+            ).tail(30)
+            has_surge = bool(surge_days.any())
+        else:
+            has_surge = False
+
+        if max_gap >= 8 or (max_gap >= 4 and has_surge):
+            score += 7
+            conditions.append(f"Catalyst confirmed: gap +{max_gap:.1f}% and/or surge candle on heavy volume")
+        elif max_gap >= 4:
+            score += 4
+            conditions.append(f"Gap up of {max_gap:.1f}% detected — potential catalyst event")
+        elif has_surge:
+            score += 3
+            conditions.append("Surge candle detected (2× ATR body on 1.8× volume) — possible catalyst without gap")
+        else:
+            score += 0
+            conditions.append("No identifiable catalyst day — organic drift, not episodic")
+
+        pct    = score / 25
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': min(25, score), 'max': 25, 'status': status, 'conditions': conditions}
+
+    # ── 2. CONSOLIDATION QUALITY (20 pts) ─────────────────────────────────────
+    def analyze_consolidation(self, df):
+        score, conditions = 0, []
+        c, h, l = df['Close'], df['High'], df['Low']
+
+        recent_30  = c.tail(30)
+        peak_idx   = int(recent_30.values.argmax())
+        days_since = len(recent_30) - 1 - peak_idx
+        price      = float(c.iloc[-1])
+        peak_price = float(recent_30.iloc[peak_idx])
+        pullback   = (price / peak_price - 1) * 100
+
+        last5_h = float(h.tail(5).max())
+        last5_l = float(l.tail(5).min())
+        rng5    = (last5_h - last5_l) / price * 100
+
+        if rng5 < 5:
+            score += 10
+            conditions.append(f"5-session H-L range: {rng5:.1f}% — exceptionally tight coil")
+        elif rng5 < 8:
+            score += 7
+            conditions.append(f"5-session H-L range: {rng5:.1f}% — tight flag, very constructive")
+        elif rng5 < 12:
+            score += 4
+            conditions.append(f"5-session H-L range: {rng5:.1f}% — moderate tightness")
+        else:
+            score += 1
+            conditions.append(f"5-session H-L range: {rng5:.1f}% — too wide, not a tight flag")
+
+        if pullback >= -10:
+            score += 6
+            conditions.append(f"Pullback: {pullback:.1f}% — barely breathed, shallow flag")
+        elif pullback >= -18:
+            score += 4
+            conditions.append(f"Pullback: {pullback:.1f}% — healthy flag depth")
+        elif pullback >= -28:
+            score += 2
+            conditions.append(f"Pullback: {pullback:.1f}% — deeper pullback, more overhead supply")
+        else:
+            score += 0
+            conditions.append(f"Pullback: {pullback:.1f}% — excessive, flag structure damaged")
+
+        if days_since >= 3:
+            consol_lows = l.tail(days_since + 1)
+            n           = len(consol_lows)
+            if n >= 3:
+                hl_count = sum(
+                    float(consol_lows.iloc[i]) > float(consol_lows.iloc[i - 1])
+                    for i in range(1, n)
+                )
+                hl_ratio = hl_count / (n - 1)
+                if hl_ratio >= 0.6:
+                    score += 4
+                    conditions.append(f"Higher lows on {hl_count}/{n-1} sessions — orderly flag structure")
+                elif hl_ratio >= 0.4:
+                    score += 2
+                    conditions.append(f"Mixed lows ({hl_count}/{n-1} higher) — neutral structure")
+                else:
+                    score += 0
+                    conditions.append("Lower lows dominating — distribution concern")
+            else:
+                score += 2
+                conditions.append("Too few sessions for structure analysis")
+        else:
+            score += 2
+            conditions.append("Very recent peak — consolidation just beginning")
+
+        if days_since < 3:
+            score -= 3
+            conditions.append(f"Only {days_since} sessions since peak — flag not yet formed")
+        elif days_since <= 15:
+            conditions.append(f"{days_since} sessions since peak — ideal window")
+        elif days_since <= 30:
+            score -= 2
+            conditions.append(f"{days_since} sessions since peak — extending, energy leaking")
+        else:
+            score -= 5
+            conditions.append(f"{days_since} sessions since peak — move is stale")
+
+        pct    = score / 20
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': max(0, min(20, score)), 'max': 20, 'status': status, 'conditions': conditions}
+
+    # ── 3. MA SURF (15 pts) ───────────────────────────────────────────────────
+    def analyze_ma_surf(self, df):
+        score, conditions = 0, []
+        row   = df.dropna(subset=['SMA10', 'SMA20']).iloc[-1]
+        price = float(row['Close'])
+        sma10 = float(row['SMA10'])
+        sma20 = float(row['SMA20'])
+        sma50 = float(row['SMA50']) if not pd.isna(row.get('SMA50', float('nan'))) else None
+
+        pct10 = (price - sma10) / sma10 * 100
+        pct20 = (price - sma20) / sma20 * 100
 
         def slope(col, n):
             s = df[col].dropna()
             return float((s.iloc[-1] - s.iloc[-n]) / s.iloc[-n] * 100) if len(s) >= n else 0.0
 
-        slopes_up = slope('SMA10', 5) > 0 and slope('SMA20', 5) > 0 and slope('SMA50', 10) > 0
+        s10_rising = slope('SMA10', 5) > 0
+        s20_rising = slope('SMA20', 5) > 0
 
-        if stacked and slopes_up:
-            score += 10; status = "SUPPORTIVE"
-            conditions.append("Full bullish MA stack (10>20>50>200) with all averages sloping upward — ideal trend alignment")
-        elif stacked or (sma10 > sma20 > sma50 and slopes_up):
-            score += 7
-            conditions.append("MAs show bullish stacking with generally rising slopes — constructive trend structure")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif sma10 > sma20 > sma50:
-            score += 5
-            conditions.append("Short-term MAs (10>20>50) stacked bullishly but longer-term alignment is mixed — emerging trend")
-        elif slopes_up:
+        if -3 <= pct10 <= 3:
+            pts10 = 8 if s10_rising else 5
+            tag   = "rising" if s10_rising else "flat"
+            conditions.append(f"Price within 10d SMA zone ({pct10:+.1f}%), SMA {tag} — ideal surf position")
+        elif pct10 > 3:
+            pts10 = 3
+            conditions.append(f"Price {pct10:+.1f}% extended above 10d SMA — too far from base")
+        else:
+            pts10 = 0
+            conditions.append(f"Price {pct10:+.1f}% below 10d SMA — broken below short-term support")
+        score += pts10
+
+        if -5 <= pct20 <= 5:
+            pts20 = 7 if s20_rising else 4
+            tag   = "rising" if s20_rising else "flat"
+            conditions.append(f"Price within 20d SMA zone ({pct20:+.1f}%), SMA {tag} — holding key support")
+        elif pct20 > 5:
+            pts20 = 2
+            conditions.append(f"Price {pct20:+.1f}% extended above 20d SMA — needs base")
+        else:
+            pts20 = 0
+            conditions.append(f"Price {pct20:+.1f}% below 20d SMA — below medium-term support")
+        score += pts20
+
+        if sma50 is not None:
+            s50_rising = slope('SMA50', 10) > 0
+            if sma10 > sma20 > sma50 and s10_rising and s20_rising and s50_rising:
+                score += 3
+                conditions.append("Full bullish stack: 10d > 20d > 50d, all rising — textbook Qullamaggie alignment")
+            elif sma10 > sma20 > sma50:
+                score += 1
+                conditions.append("10d > 20d > 50d stacked but not all rising")
+
+        pct    = min(score, 15) / 15
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': min(15, score), 'max': 15, 'status': status, 'conditions': conditions}
+
+    # ── 4. BREAKOUT READINESS (15 pts) ────────────────────────────────────────
+    def analyze_breakout_readiness(self, df):
+        score, conditions = 0, []
+        c, h, l = df['Close'], df['High'], df['Low']
+        price   = float(c.iloc[-1])
+
+        consol_high = float(h.tail(15).max())
+        dist_consol = (price / consol_high - 1) * 100
+
+        if -3 <= dist_consol <= 0:
+            score += 8
+            conditions.append(f"Price {abs(dist_consol):.1f}% from consolidation high — at the door")
+        elif dist_consol >= 0:
+            score += 6
+            conditions.append(f"Price has broken consolidation high by {dist_consol:.1f}% — breakout in progress")
+        elif dist_consol >= -7:
+            score += 6
+            conditions.append(f"Price {abs(dist_consol):.1f}% below consolidation high — approaching pivot")
+        elif dist_consol >= -12:
             score += 3
-            conditions.append("MAs not fully stacked but all rising — trend turning, not yet fully ordered")
-        else:
-            score += 1
-            conditions.append("MAs are not bullishly stacked — trend structure is mixed or bearish")
-            if status == "NEUTRAL": status = "UNSUPPORTIVE"
-
-        c10 = df['Close'].tail(10)
-        m20 = df['SMA20'].tail(10)
-        m50 = df['SMA50'].tail(10)
-
-        def reclaimed(pr, ma, lb=5):
-            for i in range(1, min(lb, len(pr))):
-                if not pd.isna(ma.iloc[i]) and pr.iloc[i] > ma.iloc[i] and pr.iloc[i-1] <= ma.iloc[i-1]:
-                    return True
-            return False
-
-        high52 = float(df['Close'].tail(252).max())
-        dist   = (price / high52 - 1) * 100
-
-        if reclaimed(c10, m50):
-            score += 10
-            conditions.append("Price recently reclaimed the 50-day SMA — high-quality trend resumption signal")
-        elif reclaimed(c10, m20):
-            score += 7
-            conditions.append("Price recently reclaimed the 20-day SMA — short-term trend structure improving")
-        elif dist > -5:
-            score += 9
-            conditions.append(f"Price is within {abs(dist):.1f}% of 52-week high — trend extended and strong")
-        elif dist > -15:
-            score += 7
-            conditions.append(f"Price is {abs(dist):.1f}% off 52-week high — trend intact with room to recover")
-        elif dist > -30:
-            score += 4
-            conditions.append(f"Price is {abs(dist):.1f}% off 52-week high — significant recovery needed")
-        else:
-            score += 1
-            conditions.append(f"Price is {abs(dist):.1f}% off 52-week high — trend deeply broken or base building")
-
-        return {'score': score, 'max': 30, 'status': status, 'conditions': conditions}
-
-    def analyze_momentum(self, df):
-        clean  = df.dropna(subset=['RSI', 'MACD', 'MACD_Signal', 'MACD_Hist'])
-        row    = clean.iloc[-1]
-        prev   = clean.iloc[-2] if len(clean) >= 2 else row
-        rsi    = float(row['RSI'])
-        rsi_s  = df['RSI'].dropna()
-        rsi5a  = float(rsi_s.iloc[-6]) if len(rsi_s) >= 6 else rsi
-        rsi_d  = rsi - rsi5a
-        macd   = float(row['MACD'])
-        sig    = float(row['MACD_Signal'])
-        hist   = float(row['MACD_Hist'])
-        hist_p = float(prev['MACD_Hist'])
-        hist5  = float(df['MACD_Hist'].dropna().iloc[-5]) if len(df['MACD_Hist'].dropna()) >= 5 else hist
-        score, conditions, status = 0, [], "NEUTRAL"
-
-        if 55 <= rsi <= 75:
-            score += 8; status = "SUPPORTIVE"
-            conditions.append(f"RSI at {rsi:.1f} — in the bullish momentum zone (55–75), ideal for swing continuation")
-        elif 45 <= rsi < 55:
-            score += 5
-            conditions.append(f"RSI at {rsi:.1f} — approaching bullish zone from neutral, momentum building")
-        elif rsi > 75:
-            score += 4
-            conditions.append(f"RSI at {rsi:.1f} — overbought; momentum strong but pullback risk elevated")
-        elif 30 <= rsi < 45:
-            score += 3; status = "UNSUPPORTIVE"
-            conditions.append(f"RSI at {rsi:.1f} — weak momentum, recovery not yet confirmed")
-        else:
-            score += 2; status = "UNSUPPORTIVE"
-            conditions.append(f"RSI at {rsi:.1f} — oversold; potential reversal but trend still bearish")
-
-        cross50 = any(
-            rsi_s.iloc[i] > 50 and rsi_s.iloc[i-1] <= 50
-            for i in range(max(-6, -len(rsi_s)+1), 0)
-        )
-        if cross50 and rsi_d > 0:
-            score += 7; status = "SUPPORTIVE"
-            conditions.append(f"RSI recently crossed above 50 with upward trajectory ({rsi_d:+.1f} over 5d) — ignition signal")
-        elif rsi > 50 and rsi_d > 2:
-            score += 6
-            conditions.append(f"RSI rising from {rsi5a:.1f} to {rsi:.1f} above midline — momentum accelerating")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif rsi > 50 and rsi_d > 0:
-            score += 4
-            conditions.append(f"RSI above 50 and gently rising — bullish bias, not strongly accelerating yet")
-        elif rsi > 50:
-            score += 2
-            conditions.append(f"RSI above 50 but declining — momentum fading, watch for reset to midline")
-            if status == "SUPPORTIVE": status = "NEUTRAL"
-        else:
-            score += 1
-            conditions.append(f"RSI below 50 with no recovery signal — bearish momentum bias persists")
-            if status in ["NEUTRAL", "UNSUPPORTIVE"]: status = "UNSUPPORTIVE"
-
-        mc  = df['MACD'].dropna()
-        sc2 = df['MACD_Signal'].dropna()
-        rbc = any(
-            mc.iloc[i] > sc2.iloc[i] and mc.iloc[i-1] <= sc2.iloc[i-1]
-            for i in range(max(-6, -min(len(mc), len(sc2))+1), 0)
-        )
-        hist_exp        = abs(hist) > abs(hist_p) and hist > 0
-        hist_neg_shrink = hist < 0 and abs(hist) < abs(hist5)
-
-        if rbc and macd > 0 and hist_exp:
-            score += 10; status = "SUPPORTIVE"
-            conditions.append("MACD: Fresh bullish cross above signal, expanding histogram above zero — strong momentum confirmation")
-        elif rbc and hist_exp:
-            score += 8
-            conditions.append("MACD: Recent bullish crossover with expanding histogram — momentum turning positive")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif macd > sig and hist_exp and macd > 0:
-            score += 8
-            conditions.append("MACD: Above signal with expanding positive histogram — momentum building")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif macd > sig and macd > 0:
-            score += 6
-            conditions.append("MACD: Above signal in positive territory, histogram tightening — momentum stabilizing")
-        elif macd > sig:
-            score += 4
-            conditions.append("MACD: Crossed above signal but still below zero — early-stage bullish cross, unconfirmed")
-        elif hist_neg_shrink:
-            score += 2
-            conditions.append("MACD: Histogram negative but contracting — bearish momentum decelerating")
+            conditions.append(f"Price {abs(dist_consol):.1f}% below consolidation high — needs more work")
         else:
             score += 0
-            conditions.append("MACD: Below signal with expanding negative histogram — bearish momentum dominant")
-            if status in ["NEUTRAL", "UNSUPPORTIVE"]: status = "UNSUPPORTIVE"
+            conditions.append(f"Price {abs(dist_consol):.1f}% below consolidation high — too far from pivot")
 
-        return {'score': score, 'max': 25, 'status': status, 'conditions': conditions}
+        high52  = float(c.tail(252).max())
+        dist52  = (price / high52 - 1) * 100
 
-    def analyze_volatility(self, df):
-        clean    = df.dropna(subset=['BB_Width', 'ATR_Pct'])
-        score, conditions, status = 0, [], "NEUTRAL"
+        if dist52 >= -5:
+            score += 4
+            conditions.append(f"Within {abs(dist52):.1f}% of 52w high — blue sky territory")
+        elif dist52 >= -15:
+            score += 2
+            conditions.append(f"{abs(dist52):.1f}% below 52w high — moderate overhead supply")
+        else:
+            score += 0
+            conditions.append(f"{abs(dist52):.1f}% below 52w high — significant overhead resistance")
 
-        bb_now   = float(clean['BB_Width'].iloc[-1])
-        bb_60d   = float(clean['BB_Width'].tail(60).mean())
-        bb_ratio = bb_now / bb_60d if bb_60d > 0 else 1.0
+        today_range = float(h.iloc[-1]) - float(l.iloc[-1])
+        atr14       = float(df['ATR'].dropna().iloc[-1]) if len(df['ATR'].dropna()) > 0 else today_range
+        range_ratio = today_range / atr14 if atr14 > 0 else 1.0
 
-        atr5  = float(clean['ATR_Pct'].tail(5).mean())
-        atr60 = float(clean['ATR_Pct'].tail(60).mean())
-        atr_r = atr5 / atr60 if atr60 > 0 else 1.0
-
-        rng   = (df['High'] - df['Low']).tail(20) / df['Close'].tail(20) * 100
-        r5    = float(rng.tail(5).mean())
-        r20   = float(rng.mean())
-        rng_r = r5 / r20 if r20 > 0 else 1.0
-
-        if bb_ratio < 0.55:
-            score += 9; status = "SUPPORTIVE"
-            conditions.append(f"Bollinger Bands severely compressed ({bb_ratio:.0%} of 60d avg) — mature squeeze, high expansion potential")
-        elif bb_ratio < 0.72:
-            score += 7; status = "SUPPORTIVE"
-            conditions.append(f"Bollinger Bands notably tighter than normal ({bb_ratio:.0%} of 60d avg) — significant volatility compression")
-        elif bb_ratio < 0.88:
-            score += 5
-            conditions.append(f"Bollinger Bands slightly below 60d avg ({bb_ratio:.0%}) — mild compression developing")
-        elif bb_ratio < 1.10:
+        if range_ratio < 0.5:
             score += 3
-            conditions.append(f"Bollinger Band width near historical average ({bb_ratio:.0%}) — no squeeze signal present")
+            conditions.append(f"Today's range {range_ratio:.0%} of ATR — inside/tight day")
+        elif range_ratio < 0.75:
+            score += 1
+            conditions.append(f"Today's range {range_ratio:.0%} of ATR — below average range")
         else:
-            score += 1; status = "UNSUPPORTIVE"
-            conditions.append(f"Bollinger Bands expanded ({bb_ratio:.0%} of 60d avg) — volatility already releasing")
+            score += 0
+            conditions.append(f"Today's range {range_ratio:.0%} of ATR — normal or wide day")
 
-        if rng_r < 0.58:
-            score += 8; status = "SUPPORTIVE"
-            conditions.append(f"Daily ranges sharply compressed (recent {r5:.1f}% vs 20d avg {r20:.1f}%) — stock is in a tight coil")
-        elif rng_r < 0.75:
-            score += 6
-            conditions.append(f"Price ranges meaningfully narrower than recent history — tightening into a potential setup")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif rng_r < 0.90:
-            score += 4
-            conditions.append(f"Price ranges slightly below average — modest compression, watch for further tightening")
-        else:
-            score += 2
-            conditions.append(f"Daily ranges at or above average — no meaningful price compression in recent sessions")
+        pct    = score / 15
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': min(15, score), 'max': 15, 'status': status, 'conditions': conditions}
 
-        if atr_r < 0.62:
-            score += 8; status = "SUPPORTIVE"
-            conditions.append(f"ATR contracted sharply ({atr5:.1f}% vs 60d avg {atr60:.1f}%) — volatility at cycle low, coiling for expansion")
-        elif atr_r < 0.78:
-            score += 6
-            conditions.append(f"ATR well below 60d average ({atr_r:.0%}) — meaningful volatility contraction in progress")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif atr_r < 0.93:
-            score += 4
-            conditions.append(f"ATR slightly below 60d avg ({atr_r:.0%}) — mild softening, not a full contraction")
-        else:
-            score += 2
-            conditions.append(f"ATR at or above historical average ({atr_r:.0%}) — volatility not contracting")
-
-        return {'score': score, 'max': 25, 'status': status, 'conditions': conditions}
-
-    def analyze_volume(self, df):
+    # ── 5. VOLUME SIGNATURE (15 pts) ──────────────────────────────────────────
+    def analyze_volume_signature(self, df):
+        score, conditions = 0, []
         clean    = df.dropna(subset=['Vol_MA20'])
-        recent   = clean.tail(20)
         vol_ma20 = float(clean['Vol_MA20'].iloc[-1])
-        score, conditions, status = 0, [], "NEUTRAL"
 
-        up = recent[recent['Close'] > recent['Open']]
-        dn = recent[recent['Close'] <= recent['Open']]
-        uv = float(up['Volume'].mean()) if len(up) > 0 else 0
-        dv = float(dn['Volume'].mean()) if len(dn) > 0 else 1
+        r5v = float(clean['Volume'].tail(5).mean())
+        p5v = float(clean['Volume'].tail(10).head(5).mean())
+        vr  = r5v / vol_ma20
+
+        if vr < 0.5:
+            score += 6
+            conditions.append(f"Volume at {vr:.2f}x avg — severe dry-up, ideal pre-breakout silence")
+        elif vr < 0.65:
+            score += 5
+            conditions.append(f"Volume at {vr:.2f}x avg — clear dry-up, very constructive")
+        elif vr < 0.80:
+            score += 3
+            conditions.append(f"Volume at {vr:.2f}x avg — mild dry-up, quietly consolidating")
+        elif vr < 1.0:
+            score += 1
+            conditions.append(f"Volume at {vr:.2f}x avg — slightly below average")
+        else:
+            score += 0
+            conditions.append(f"Volume at {vr:.2f}x avg — elevated during consolidation, distribution risk")
+
+        recent = clean.tail(20)
+        up     = recent[recent['Close'] > recent['Open']]
+        dn     = recent[recent['Close'] <= recent['Open']]
+        uv     = float(up['Volume'].mean()) if len(up) > 0 else 0
+        dv     = float(dn['Volume'].mean()) if len(dn) > 0 else 1
 
         if uv > 0 and dv > 0:
             acc = uv / dv
             if acc > 1.6:
-                score += 8; status = "SUPPORTIVE"
-                conditions.append(f"Volume is {acc:.1f}x higher on up-days vs down-days — clear institutional accumulation signature")
+                score += 5
+                conditions.append(f"Up-day vol {acc:.1f}x down-day vol — clear accumulation on flagpole")
             elif acc > 1.25:
-                score += 6; status = "SUPPORTIVE"
-                conditions.append(f"Up-day volume moderately exceeds down-day volume ({acc:.1f}x) — mild accumulation bias")
+                score += 3
+                conditions.append(f"Up-day vol {acc:.1f}x down-day vol — mild accumulation bias")
             elif acc > 0.85:
-                score += 3
-                conditions.append(f"Up/down volume near parity ({acc:.1f}x) — neutral, no clear accumulation signal")
-            else:
-                score += 1; status = "UNSUPPORTIVE"
-                conditions.append(f"Down-day volume exceeds up-day volume ({acc:.1f}x) — potential distribution pattern")
-        else:
-            score += 3
-            conditions.append("Insufficient data to determine accumulation/distribution pattern")
-
-        r5     = clean.tail(5)
-        spikes = r5['Volume'] / vol_ma20
-        mx_spk = float(spikes.max())
-
-        if mx_spk > 2.5:
-            idx   = spikes.idxmax()
-            is_up = float(clean.loc[idx, 'Close']) > float(clean.loc[idx, 'Open'])
-            if is_up:
-                score += 5; status = "SUPPORTIVE"
-                conditions.append(f"Volume spike of {mx_spk:.1f}x avg on an up-day in last 5 sessions — potential institutional buy program")
-            else:
                 score += 1
-                conditions.append(f"Volume spike of {mx_spk:.1f}x avg on a down-day — possible distribution or stop-hunt")
-                if status != "SUPPORTIVE": status = "UNSUPPORTIVE"
-        elif mx_spk > 1.5:
-            score += 3
-            conditions.append(f"Moderate volume pickup ({mx_spk:.1f}x avg) in recent sessions — notable but not extreme")
-        else:
-            score += 1
-            conditions.append(f"No unusual volume spikes in last 5 sessions — volume quiet near average levels")
+                conditions.append(f"Up/down vol near parity ({acc:.1f}x) — neutral")
+            else:
+                score += 0
+                conditions.append(f"Down-day vol exceeds up-day ({acc:.1f}x) — distribution concern")
 
-        p5v  = float(clean['Volume'].tail(10).head(5).mean())
-        r5v  = float(clean['Volume'].tail(5).mean())
-        vr   = r5v / vol_ma20
-        vchg = (r5v / p5v - 1) * 100 if p5v > 0 else 0
-        prng = float(
-            (clean['Close'].tail(5).max() - clean['Close'].tail(5).min())
-            / clean['Close'].tail(5).mean() * 100
-        )
+        spikes  = clean['Volume'].tail(10) / vol_ma20
+        mx_spk  = float(spikes.max())
+        spk_idx = spikes.idxmax()
+        is_up   = float(clean.loc[spk_idx, 'Close']) > float(clean.loc[spk_idx, 'Open'])
 
-        if prng < 3.0 and r5v < p5v * 0.80:
-            score += 4; status = "SUPPORTIVE"
-            conditions.append(f"Volume drying up ({vchg:.0f}% vs prior week) while price coils in {prng:.1f}% range — textbook pre-breakout setup")
-        elif vr < 0.65:
-            score += 3
-            conditions.append(f"Volume well below 20d avg ({vr:.2f}x) — low-volume consolidation, typical before breakout")
-            if status != "SUPPORTIVE": status = "SUPPORTIVE"
-        elif vr < 0.85:
+        if mx_spk > 2.0 and is_up:
+            score += 4
+            conditions.append(f"Volume spike {mx_spk:.1f}x avg on up-day — institutional buy program fingerprint")
+        elif mx_spk > 1.5 and is_up:
             score += 2
-            conditions.append(f"Volume modestly below average ({vr:.2f}x) — mild drying up, constructive")
+            conditions.append(f"Volume pickup {mx_spk:.1f}x avg on up-day — buying interest on the move")
+        elif mx_spk > 2.0 and not is_up:
+            score += 0
+            conditions.append(f"Volume spike {mx_spk:.1f}x avg on down-day — distribution warning")
         else:
             score += 1
-            conditions.append(f"Volume elevated ({vr:.2f}x avg) — active participation; watch price direction for context")
+            conditions.append(f"No major volume spike (max {mx_spk:.1f}x) — quiet base, no selling pressure")
 
-        adv = clean[clean['Close'] > clean['Open']].tail(3)
-        if len(adv) > 0:
-            avr = float((adv['Volume'] / vol_ma20).mean())
-            if avr > 1.5:
-                score += 3
-                conditions.append(f"Recent bullish candles backed by {avr:.1f}x avg volume — buying demand confirmed")
-                if status != "SUPPORTIVE": status = "SUPPORTIVE"
-            elif avr > 1.0:
-                score += 2
-                conditions.append(f"Recent advances show average-to-above-average volume ({avr:.1f}x) — buying interest present")
-            else:
-                score += 1
-                conditions.append(f"Recent advances on below-average volume ({avr:.1f}x) — buying conviction appears weak")
+        pct    = score / 15
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': min(15, score), 'max': 15, 'status': status, 'conditions': conditions}
 
-        return {'score': score, 'max': 20, 'status': status, 'conditions': conditions}
+    # ── 6. RELATIVE STRENGTH (10 pts) ─────────────────────────────────────────
+    def analyze_relative_strength(self, df):
+        score, conditions = 0, []
+        c = df['Close']
 
+        ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21])  - 1) * 100 if len(c) >= 21  else 0
+        ret_3m = (float(c.iloc[-1]) / float(c.iloc[-63])  - 1) * 100 if len(c) >= 63  else 0
+        ret_6m = (float(c.iloc[-1]) / float(c.iloc[-126]) - 1) * 100 if len(c) >= 126 else 0
+
+        if ret_1m > 20:
+            score += 3
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — top-tier near-term performer")
+        elif ret_1m > 10:
+            score += 2
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — above-average 1m strength")
+        else:
+            score += 0
+            conditions.append(f"1-month return: {ret_1m:.1f}% — not in top tier on 1m basis")
+
+        if ret_3m > 40:
+            score += 4
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — exceptional leader, institutional-grade strength")
+        elif ret_3m > 20:
+            score += 3
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — solid 3m performer")
+        else:
+            score += 0
+            conditions.append(f"3-month return: {ret_3m:.1f}% — 3m performance not exceptional")
+
+        if ret_6m > 60:
+            score += 3
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — dominant 6m leader, top 1–2% territory")
+        elif ret_6m > 30:
+            score += 2
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — strong 6m performer")
+        else:
+            score += 0
+            conditions.append(f"6-month return: {ret_6m:.1f}% — 6m performance not in leading tier")
+
+        pct    = score / 10
+        status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
+        return {'score': min(10, score), 'max': 10, 'status': status, 'conditions': conditions}
+
+    # ── RATE ONE STOCK ────────────────────────────────────────────────────────
     def rate_stock(self, ticker):
         df = self.fetch_data(ticker)
         if df is None:
@@ -411,18 +446,23 @@ class SwingTradeAnalyzer:
         df = self.calculate_indicators(df)
 
         adr_pct, dollar_volume = self.compute_adr_and_dolvol(df)
-        trend      = self.analyze_trend(df)
-        momentum   = self.analyze_momentum(df)
-        volatility = self.analyze_volatility(df)
-        volume     = self.analyze_volume(df)
-        total      = trend['score'] + momentum['score'] + volatility['score'] + volume['score']
 
-        if   total >= 85: grade, verdict = "A+", "PRIME SETUP — Multiple factors aligned for a potential supernova move"
-        elif total >= 75: grade, verdict = "A",  "STRONG SETUP — High-probability swing candidate with strong confluence"
-        elif total >= 65: grade, verdict = "B",  "DEVELOPING SETUP — Several factors supportive, watch for confirmation"
-        elif total >= 50: grade, verdict = "C",  "MIXED SETUP — Some potential but lacks full factor alignment"
-        elif total >= 35: grade, verdict = "D",  "WEAK SETUP — Most factors are neutral or unsupportive"
-        else:             grade, verdict = "F",  "NO SETUP — Conditions are unfavorable for swing entry"
+        prior_move    = self.analyze_prior_move(df)
+        consolidation = self.analyze_consolidation(df)
+        ma_surf       = self.analyze_ma_surf(df)
+        br_ready      = self.analyze_breakout_readiness(df)
+        vol_sig       = self.analyze_volume_signature(df)
+        rel_str       = self.analyze_relative_strength(df)
+
+        total = (prior_move['score'] + consolidation['score'] + ma_surf['score'] +
+                 br_ready['score'] + vol_sig['score'] + rel_str['score'])
+
+        if   total >= 88: grade, verdict = "A+", "PRIME SETUP — Textbook Qullamaggie flag on a leader, stalk for entry"
+        elif total >= 75: grade, verdict = "A",  "STRONG SETUP — High-quality consolidation, near pivot"
+        elif total >= 62: grade, verdict = "B",  "DEVELOPING — Flagpole solid, flag still forming"
+        elif total >= 48: grade, verdict = "C",  "MIXED — Some elements present, not yet actionable"
+        elif total >= 35: grade, verdict = "D",  "WEAK — Prior move fading or consolidation messy"
+        else:             grade, verdict = "F",  "NO SETUP — Not a Qullamaggie candidate"
 
         try:
             name = yf.Ticker(ticker).info.get('shortName', ticker)
@@ -438,15 +478,17 @@ class SwingTradeAnalyzer:
             'verdict':       verdict,
             'adr_pct':       adr_pct,
             'dollar_volume': dollar_volume,
-            'trend':         trend,
-            'momentum':      momentum,
-            'volatility':    volatility,
-            'volume':        volume,
+            'prior_move':    prior_move,
+            'consolidation': consolidation,
+            'ma_surf':       ma_surf,
+            'br_ready':      br_ready,
+            'vol_sig':       vol_sig,
+            'rel_str':       rel_str,
         }
 
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
-_analyzer = SwingTradeAnalyzer()
+_analyzer = BreakoutAnalyzer()
 
 @app.post("/api/rate")
 async def rate_stock(request: Request):
