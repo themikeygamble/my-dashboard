@@ -63,69 +63,43 @@ class BreakoutAnalyzer:
         c = df['Close']
 
         ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21]) - 1) * 100 if len(c) >= 21 else 0
-        if ret_1m > 50:
+        if ret_1m > 40:
             score += 10
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — explosive flagpole, top-tier momentum")
-        elif ret_1m > 30:
-            score += 8
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — strong flagpole, clear prior move")
-        elif ret_1m > 20:
-            score += 5
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — solid move, moderate flagpole")
-        elif ret_1m > 10:
-            score += 3
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — mild move, weak flagpole")
-        else:
-            score += 0
-            conditions.append(f"1-month return: {ret_1m:.1f}% — no meaningful prior move")
-
-        recent     = c.tail(21)
-        low_idx    = int(recent.values.argmin())
-        high_idx   = int(recent.values.argmax())
-        days_taken = abs(high_idx - low_idx)
-
-        if ret_1m > 10:
-            if days_taken <= 7:
-                score += 8
-                conditions.append(f"Move completed in {days_taken} sessions — sharp, impulsive flagpole")
-            elif days_taken <= 14:
-                score += 5
-                conditions.append(f"Move took {days_taken} sessions — reasonably sharp flagpole")
-            else:
-                score += 2
-                conditions.append(f"Move took {days_taken} sessions — slow grind, not ideal flagpole character")
-        else:
-            score += 0
-            conditions.append("No significant move to measure sharpness")
-
-        gap     = (df['Open'] / df['Close'].shift(1) - 1) * 100
-        max_gap = float(gap.tail(30).max())
-        body    = (df['Close'] - df['Open']).abs()
-        atr_v   = df['ATR'].dropna()
-        vol_v   = df['Vol_MA20'].dropna()
-
-        if len(atr_v) > 0 and len(vol_v) > 0:
-            surge_days = (
-                (body > 2 * df['ATR']) &
-                (df['Volume'] > 1.8 * df['Vol_MA20']) &
-                (df['Close'] > df['Open'])
-            ).tail(30)
-            has_surge = bool(surge_days.any())
-        else:
-            has_surge = False
-
-        if max_gap >= 8 or (max_gap >= 4 and has_surge):
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — explosive near-term flagpole")
+        elif ret_1m > 25:
             score += 7
-            conditions.append(f"Catalyst confirmed: gap +{max_gap:.1f}% and/or surge candle on heavy volume")
-        elif max_gap >= 4:
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — strong flagpole, clear prior move")
+        elif ret_1m > 15:
             score += 4
-            conditions.append(f"Gap up of {max_gap:.1f}% detected — potential catalyst event")
-        elif has_surge:
-            score += 3
-            conditions.append("Surge candle detected (2× ATR body on 1.8× volume) — possible catalyst without gap")
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — solid move, moderate flagpole")
         else:
             score += 0
-            conditions.append("No identifiable catalyst day — organic drift, not episodic")
+            conditions.append(f"1-month return: {ret_1m:.1f}% — mild move, weak flagpole")
+
+        ret_3m = (float(c.iloc[-1]) / float(c.iloc[-63]) - 1) * 100 if len(c) >= 63 else 0
+        if ret_3m > 60:
+            score += 10
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — exceptional top-tier momentum")
+        elif ret_3m > 40:
+            score += 7
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — strong medium-term strength")
+        elif ret_3m > 20:
+            score += 4
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — solid medium-term performer")
+        else:
+            score += 0
+            conditions.append(f"3-month return: {ret_3m:.1f}% — 3m performance not exceptional")
+
+        ret_6m = (float(c.iloc[-1]) / float(c.iloc[-126]) - 1) * 100 if len(c) >= 126 else 0
+        if ret_6m > 80:
+            score += 5
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — exceptional long-term leader")
+        elif ret_6m > 50:
+            score += 3
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — strong long-term performer")
+        else:
+            score += 0
+            conditions.append(f"6-month return: {ret_6m:.1f}% — 6m performance not in leading tier")
 
         pct    = score / 25
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
@@ -395,56 +369,83 @@ class BreakoutAnalyzer:
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
         return {'score': min(15, score), 'max': 15, 'status': status, 'conditions': conditions}
 
-    # ── 6. RELATIVE STRENGTH (10 pts) ─────────────────────────────────────────
-    def analyze_relative_strength(self, df):
+    # ── 6. RELATIVE STRENGTH vs SPY (10 pts) ──────────────────────────────────
+    def analyze_relative_strength(self, df, spy_df=None):
         score, conditions = 0, []
-        c = df['Close']
+        
+        try:
+            c = df['Close']
+            if len(c) < 252:
+                return {'score': 5, 'max': 10, 'status': 'NEUTRAL', 
+                        'conditions': ['Insufficient history (need 252 days) for true RS rating — defaulting to neutral']}
+            
+            c_now = float(c.iloc[-1])
+            perf_q1 = c_now / float(c.iloc[-63])
+            perf_q2 = c_now / float(c.iloc[-126])
+            perf_q3 = c_now / float(c.iloc[-189])
+            perf_q4 = c_now / float(c.iloc[-252])
+            rs_stock = 0.4 * perf_q1 + 0.2 * perf_q2 + 0.2 * perf_q3 + 0.2 * perf_q4
+            
+            if spy_df is not None and len(spy_df) >= 252:
+                sc = spy_df['Close']
+                sc_now = float(sc.iloc[-1])
+                spy_q1 = sc_now / float(sc.iloc[-63])
+                spy_q2 = sc_now / float(sc.iloc[-126])
+                spy_q3 = sc_now / float(sc.iloc[-189])
+                spy_q4 = sc_now / float(sc.iloc[-252])
+                rs_spy = 0.4 * spy_q1 + 0.2 * spy_q2 + 0.2 * spy_q3 + 0.2 * spy_q4
+            else:
+                rs_spy = 1.0
+                
+            total_rs_score = (rs_stock / rs_spy) * 100
+            
+            rs_rating = 1
+            if total_rs_score >= 195.93: rs_rating = 99
+            elif total_rs_score >= 117.11: rs_rating = 90 + (total_rs_score - 117.11) / (195.93 - 117.11) * 8
+            elif total_rs_score >= 99.04:  rs_rating = 70 + (total_rs_score - 99.04) / (117.11 - 99.04) * 19
+            elif total_rs_score >= 91.66:  rs_rating = 50 + (total_rs_score - 91.66) / (99.04 - 91.66) * 19
+            elif total_rs_score >= 80.96:  rs_rating = 30 + (total_rs_score - 80.96) / (91.66 - 80.96) * 19
+            elif total_rs_score >= 53.64:  rs_rating = 10 + (total_rs_score - 53.64) / (80.96 - 53.64) * 19
+            elif total_rs_score >= 24.86:  rs_rating = 2 + (total_rs_score - 24.86) / (53.64 - 24.86) * 7
+            
+            rs_rating = min(99, max(1, round(rs_rating)))
+            
+            if rs_rating >= 95:
+                score += 10
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 5% of market, true market leader")
+            elif rs_rating >= 90:
+                score += 8
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 10% of market, strong relative strength")
+            elif rs_rating >= 80:
+                score += 6
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 20% of market, solid outperformance")
+            elif rs_rating >= 70:
+                score += 4
+                conditions.append(f"IBD RS Rating: {rs_rating} — Outperforming the majority of the market")
+            elif rs_rating >= 50:
+                score += 2
+                conditions.append(f"IBD RS Rating: {rs_rating} — Average relative strength, inline with market")
+            else:
+                score += 0
+                conditions.append(f"IBD RS Rating: {rs_rating} — Underperforming the broader market")
 
-        ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21])  - 1) * 100 if len(c) >= 21  else 0
-        ret_3m = (float(c.iloc[-1]) / float(c.iloc[-63])  - 1) * 100 if len(c) >= 63  else 0
-        ret_6m = (float(c.iloc[-1]) / float(c.iloc[-126]) - 1) * 100 if len(c) >= 126 else 0
-
-        if ret_1m > 20:
-            score += 3
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — top-tier near-term performer")
-        elif ret_1m > 10:
-            score += 2
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — above-average 1m strength")
-        else:
-            score += 0
-            conditions.append(f"1-month return: {ret_1m:.1f}% — not in top tier on 1m basis")
-
-        if ret_3m > 40:
-            score += 4
-            conditions.append(f"3-month return: +{ret_3m:.1f}% — exceptional leader, institutional-grade strength")
-        elif ret_3m > 20:
-            score += 3
-            conditions.append(f"3-month return: +{ret_3m:.1f}% — solid 3m performer")
-        else:
-            score += 0
-            conditions.append(f"3-month return: {ret_3m:.1f}% — 3m performance not exceptional")
-
-        if ret_6m > 60:
-            score += 3
-            conditions.append(f"6-month return: +{ret_6m:.1f}% — dominant 6m leader, top 1–2% territory")
-        elif ret_6m > 30:
-            score += 2
-            conditions.append(f"6-month return: +{ret_6m:.1f}% — strong 6m performer")
-        else:
-            score += 0
-            conditions.append(f"6-month return: {ret_6m:.1f}% — 6m performance not in leading tier")
+        except Exception as e:
+            return {'score': 5, 'max': 10, 'status': 'NEUTRAL', 
+                    'conditions': [f'Error calculating RS Rating: {e} — defaulting to neutral']}
 
         pct    = score / 10
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
-        return {'score': min(10, score), 'max': 10, 'status': status, 'conditions': conditions}
+        return {'score': score, 'max': 10, 'status': status, 'conditions': conditions}
 
     # ── RATE ONE STOCK ────────────────────────────────────────────────────────
     def rate_stock(self, ticker):
         df = self.fetch_data(ticker)
         if df is None:
             return None
+            
+        spy_df = self.fetch_data('SPY')
+        
         df = self.calculate_indicators(df)
-
         adr_pct, dollar_volume = self.compute_adr_and_dolvol(df)
 
         prior_move    = self.analyze_prior_move(df)
@@ -452,7 +453,7 @@ class BreakoutAnalyzer:
         ma_surf       = self.analyze_ma_surf(df)
         br_ready      = self.analyze_breakout_readiness(df)
         vol_sig       = self.analyze_volume_signature(df)
-        rel_str       = self.analyze_relative_strength(df)
+        rel_str       = self.analyze_relative_strength(df, spy_df)
 
         total = (prior_move['score'] + consolidation['score'] + ma_surf['score'] +
                  br_ready['score'] + vol_sig['score'] + rel_str['score'])
