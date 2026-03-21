@@ -136,93 +136,63 @@ class BreakoutAnalyzer:
 
         # 1-month return (0-10 pts)
         ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21]) - 1) * 100 if len(c) >= 21 else 0
-        if ret_1m > 50:
+        if ret_1m > 40:
             score += 10
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — explosive flagpole, top-tier momentum")
-        elif ret_1m > 30:
-            score += 8
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — strong flagpole, clear prior move")
-        elif ret_1m > 20:
-            score += 5
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — solid move, moderate flagpole")
-        elif ret_1m > 10:
-            score += 3
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — mild move, weak flagpole")
-        else:
-            score += 0
-            conditions.append(f"1-month return: {ret_1m:.1f}% — no meaningful prior move")
-
-        # Move sharpness: how quickly was the bulk of the move made? (0-8 pts)
-        # Find the highest close in last 21 sessions and how many days it took from low
-        recent     = c.tail(21)
-        low_idx    = int(recent.values.argmin())
-        high_idx   = int(recent.values.argmax())
-        days_taken = abs(high_idx - low_idx)
-
-        if ret_1m > 10:
-            if days_taken <= 7:
-                score += 8
-                conditions.append(f"Move completed in {days_taken} sessions — sharp, impulsive flagpole")
-            elif days_taken <= 14:
-                score += 5
-                conditions.append(f"Move took {days_taken} sessions — reasonably sharp flagpole")
-            else:
-                score += 2
-                conditions.append(f"Move took {days_taken} sessions — slow grind, not ideal flagpole character")
-        else:
-            score += 0
-            conditions.append("No significant move to measure sharpness")
-
-        # Catalyst day detection (0-7 pts)
-        # Gap up >= 4% OR single candle body > 2x ATR on volume > 1.8x avg
-        gap       = (df['Open'] / df['Close'].shift(1) - 1) * 100
-        max_gap   = float(gap.tail(30).max())
-        body      = (df['Close'] - df['Open']).abs()
-        atr_valid = df['ATR'].dropna()
-        vol_ma20  = df['Vol_MA20'].dropna()
-
-        if len(atr_valid) > 0 and len(vol_ma20) > 0:
-            surge_days = (
-                (body > 2 * df['ATR']) &
-                (df['Volume'] > 1.8 * df['Vol_MA20']) &
-                (df['Close'] > df['Open'])
-            ).tail(30)
-            has_surge = bool(surge_days.any())
-        else:
-            has_surge = False
-
-        if max_gap >= 8 or (max_gap >= 4 and has_surge):
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — explosive near-term flagpole")
+        elif ret_1m > 25:
             score += 7
-            conditions.append(f"Catalyst confirmed: gap +{max_gap:.1f}% and/or surge candle on heavy volume — institutional event fingerprint")
-        elif max_gap >= 4:
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — strong flagpole, clear prior move")
+        elif ret_1m > 15:
             score += 4
-            conditions.append(f"Gap up of {max_gap:.1f}% detected in last 30 sessions — potential catalyst event")
-        elif has_surge:
-            score += 3
-            conditions.append("Surge candle (2× ATR body on 1.8× volume) detected — possible catalyst without gap")
+            conditions.append(f"1-month return: +{ret_1m:.1f}% — solid move, moderate flagpole")
         else:
             score += 0
-            conditions.append("No identifiable catalyst day in last 30 sessions — organic drift, not episodic")
+            conditions.append(f"1-month return: {ret_1m:.1f}% — mild move, weak flagpole")
+
+        # 3-month return (0-10 pts)
+        ret_3m = (float(c.iloc[-1]) / float(c.iloc[-63]) - 1) * 100 if len(c) >= 63 else 0
+        if ret_3m > 60:
+            score += 10
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — exceptional top-tier momentum")
+        elif ret_3m > 40:
+            score += 7
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — strong medium-term strength")
+        elif ret_3m > 20:
+            score += 4
+            conditions.append(f"3-month return: +{ret_3m:.1f}% — solid medium-term performer")
+        else:
+            score += 0
+            conditions.append(f"3-month return: {ret_3m:.1f}% — 3m performance not exceptional")
+
+        # 6-month return (0-5 pts)
+        ret_6m = (float(c.iloc[-1]) / float(c.iloc[-126]) - 1) * 100 if len(c) >= 126 else 0
+        if ret_6m > 80:
+            score += 5
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — exceptional long-term leader")
+        elif ret_6m > 50:
+            score += 3
+            conditions.append(f"6-month return: +{ret_6m:.1f}% — strong long-term performer")
+        else:
+            score += 0
+            conditions.append(f"6-month return: {ret_6m:.1f}% — 6m performance not in leading tier")
 
         pct    = score / 25
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
         return {'score': min(25, score), 'max': 25, 'status': status, 'conditions': conditions}
+
 
     # ── 2. CONSOLIDATION QUALITY (20 pts) ─────────────────────────────────────
     def analyze_consolidation(self, df):
         score, conditions = 0, []
         c, h, l = df['Close'], df['High'], df['Low']
 
-        # Find consolidation start: last local high in recent 30 sessions
         recent_30   = c.tail(30)
         peak_idx    = int(recent_30.values.argmax())
-        days_since  = len(recent_30) - 1 - peak_idx  # sessions since peak
-
+        days_since  = len(recent_30) - 1 - peak_idx 
         price       = float(c.iloc[-1])
         peak_price  = float(recent_30.iloc[peak_idx])
-        pullback    = (price / peak_price - 1) * 100  # negative = pullback
+        pullback    = (price / peak_price - 1) * 100 
 
-        # Range tightness: H-L of last 5 sessions as % of current price (0-10 pts)
         last5_h = float(h.tail(5).max())
         last5_l = float(l.tail(5).min())
         rng5    = (last5_h - last5_l) / price * 100
@@ -240,7 +210,6 @@ class BreakoutAnalyzer:
             score += 1
             conditions.append(f"5-session H-L range: {rng5:.1f}% — too wide, not a tight flag")
 
-        # Pullback depth off flagpole high (0-6 pts)
         if pullback >= -10:
             score += 6
             conditions.append(f"Pullback: {pullback:.1f}% off recent high — barely breathed, shallow flag")
@@ -254,7 +223,6 @@ class BreakoutAnalyzer:
             score += 0
             conditions.append(f"Pullback: {pullback:.1f}% off recent high — excessive pullback, flag structure damaged")
 
-        # Structure: higher lows in the consolidation window (0-4 pts)
         if days_since >= 3:
             consol_lows = l.tail(days_since + 1)
             n           = len(consol_lows)
@@ -280,7 +248,6 @@ class BreakoutAnalyzer:
             score += 2
             conditions.append("Very recent peak — consolidation just beginning")
 
-        # Duration penalty / ideal window
         if days_since < 3:
             score -= 3
             conditions.append(f"Only {days_since} sessions since peak — flag not yet formed, too early")
@@ -317,7 +284,6 @@ class BreakoutAnalyzer:
         s10_rising = slope('SMA10', 5) > 0
         s20_rising = slope('SMA20', 5) > 0
 
-        # 10d SMA surf (0-8 pts)
         if -3 <= pct10 <= 3:
             pts10 = 8 if s10_rising else 5
             tag   = "rising" if s10_rising else "flat — watch slope"
@@ -330,7 +296,6 @@ class BreakoutAnalyzer:
             conditions.append(f"Price {pct10:+.1f}% below 10d SMA — broken below short-term support")
         score += pts10
 
-        # 20d SMA surf (0-7 pts)
         if -5 <= pct20 <= 5:
             pts20 = 7 if s20_rising else 4
             tag   = "rising" if s20_rising else "flat"
@@ -343,7 +308,6 @@ class BreakoutAnalyzer:
             conditions.append(f"Price {pct20:+.1f}% below 20d SMA — below medium-term support, flag structure broken")
         score += pts20
 
-        # Full MA stack bonus (capped at 15 total)
         if sma50 is not None:
             s50_rising = slope('SMA50', 10) > 0
             if sma10 > sma20 > sma50 and s10_rising and s20_rising and s50_rising:
@@ -363,7 +327,6 @@ class BreakoutAnalyzer:
         c, h, l = df['Close'], df['High'], df['Low']
         price   = float(c.iloc[-1])
 
-        # Distance to consolidation high (recent 15 sessions) (0-8 pts)
         consol_high = float(h.tail(15).max())
         dist_consol = (price / consol_high - 1) * 100
 
@@ -383,7 +346,6 @@ class BreakoutAnalyzer:
             score += 0
             conditions.append(f"Price {abs(dist_consol):.1f}% below consolidation high — too far from breakout level")
 
-        # Distance to 52-week high (0-4 pts)
         high52  = float(c.tail(252).max())
         dist52  = (price / high52 - 1) * 100
 
@@ -397,10 +359,8 @@ class BreakoutAnalyzer:
             score += 0
             conditions.append(f"Price {abs(dist52):.1f}% below 52w high — significant overhead resistance")
 
-        # Today's range compression vs ATR14 (0-3 pts)
         today_range = float(h.iloc[-1]) - float(l.iloc[-1])
         atr14       = float(df['ATR'].dropna().iloc[-1]) if len(df['ATR'].dropna()) > 0 else today_range
-
         range_ratio = today_range / atr14 if atr14 > 0 else 1.0
 
         if range_ratio < 0.5:
@@ -423,7 +383,6 @@ class BreakoutAnalyzer:
         clean    = df.dropna(subset=['Vol_MA20'])
         vol_ma20 = float(clean['Vol_MA20'].iloc[-1])
 
-        # Volume dry-up during consolidation (0-6 pts)
         r5v  = float(clean['Volume'].tail(5).mean())
         p5v  = float(clean['Volume'].tail(10).head(5).mean())
         vr   = r5v / vol_ma20
@@ -445,7 +404,6 @@ class BreakoutAnalyzer:
             score += 0
             conditions.append(f"Volume at {vr:.2f}x avg — elevated during consolidation, distribution risk")
 
-        # Accumulation bias: up-day vol vs down-day vol (0-5 pts)
         recent = clean.tail(20)
         up     = recent[recent['Close'] > recent['Open']]
         dn     = recent[recent['Close'] <= recent['Open']]
@@ -467,7 +425,6 @@ class BreakoutAnalyzer:
                 score += 0
                 conditions.append(f"Down-day vol exceeds up-day ({acc:.1f}x) — distribution concern")
 
-        # Flagpole volume spike in last 10 sessions (0-4 pts)
         spikes = clean['Volume'].tail(10) / vol_ma20
         mx_spk = float(spikes.max())
         spk_idx = spikes.idxmax()
@@ -490,53 +447,76 @@ class BreakoutAnalyzer:
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
         return {'score': min(15, score), 'max': 15, 'status': status, 'conditions': conditions}
 
-    # ── 6. RELATIVE STRENGTH (10 pts) ─────────────────────────────────────────
-    def analyze_relative_strength(self, df):
+    # ── 6. RELATIVE STRENGTH vs SPY (10 pts) ──────────────────────────────────
+    def analyze_relative_strength(self, df, spy_df=None):
         score, conditions = 0, []
-        c = df['Close']
+        
+        try:
+            c = df['Close']
+            if len(c) < 252:
+                return {'score': 5, 'max': 10, 'status': 'NEUTRAL', 
+                        'conditions': ['Insufficient history (need 252 days) for true RS rating — defaulting to neutral']}
+            
+            c_now = float(c.iloc[-1])
+            perf_q1 = c_now / float(c.iloc[-63])
+            perf_q2 = c_now / float(c.iloc[-126])
+            perf_q3 = c_now / float(c.iloc[-189])
+            perf_q4 = c_now / float(c.iloc[-252])
+            rs_stock = 0.4 * perf_q1 + 0.2 * perf_q2 + 0.2 * perf_q3 + 0.2 * perf_q4
+            
+            if spy_df is not None and len(spy_df) >= 252:
+                sc = spy_df['Close']
+                sc_now = float(sc.iloc[-1])
+                spy_q1 = sc_now / float(sc.iloc[-63])
+                spy_q2 = sc_now / float(sc.iloc[-126])
+                spy_q3 = sc_now / float(sc.iloc[-189])
+                spy_q4 = sc_now / float(sc.iloc[-252])
+                rs_spy = 0.4 * spy_q1 + 0.2 * spy_q2 + 0.2 * spy_q3 + 0.2 * spy_q4
+            else:
+                rs_spy = 1.0
+                
+            total_rs_score = (rs_stock / rs_spy) * 100
+            
+            rs_rating = 1
+            if total_rs_score >= 195.93: rs_rating = 99
+            elif total_rs_score >= 117.11: rs_rating = 90 + (total_rs_score - 117.11) / (195.93 - 117.11) * 8
+            elif total_rs_score >= 99.04:  rs_rating = 70 + (total_rs_score - 99.04) / (117.11 - 99.04) * 19
+            elif total_rs_score >= 91.66:  rs_rating = 50 + (total_rs_score - 91.66) / (99.04 - 91.66) * 19
+            elif total_rs_score >= 80.96:  rs_rating = 30 + (total_rs_score - 80.96) / (91.66 - 80.96) * 19
+            elif total_rs_score >= 53.64:  rs_rating = 10 + (total_rs_score - 53.64) / (80.96 - 53.64) * 19
+            elif total_rs_score >= 24.86:  rs_rating = 2 + (total_rs_score - 24.86) / (53.64 - 24.86) * 7
+            
+            rs_rating = min(99, max(1, round(rs_rating)))
+            
+            if rs_rating >= 95:
+                score += 10
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 5% of market, true market leader")
+            elif rs_rating >= 90:
+                score += 8
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 10% of market, strong relative strength")
+            elif rs_rating >= 80:
+                score += 6
+                conditions.append(f"IBD RS Rating: {rs_rating} — Top 20% of market, solid outperformance")
+            elif rs_rating >= 70:
+                score += 4
+                conditions.append(f"IBD RS Rating: {rs_rating} — Outperforming the majority of the market")
+            elif rs_rating >= 50:
+                score += 2
+                conditions.append(f"IBD RS Rating: {rs_rating} — Average relative strength, inline with market")
+            else:
+                score += 0
+                conditions.append(f"IBD RS Rating: {rs_rating} — Underperforming the broader market")
 
-        # 1-month return (0-3 pts)
-        ret_1m = (float(c.iloc[-1]) / float(c.iloc[-21]) - 1) * 100 if len(c) >= 21 else 0
-        if ret_1m > 20:
-            score += 3
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — top-tier 1m performer")
-        elif ret_1m > 10:
-            score += 2
-            conditions.append(f"1-month return: +{ret_1m:.1f}% — above-average near-term strength")
-        else:
-            score += 0
-            conditions.append(f"1-month return: {ret_1m:.1f}% — not in the top tier on 1m basis")
-
-        # 3-month return (0-4 pts)
-        ret_3m = (float(c.iloc[-1]) / float(c.iloc[-63]) - 1) * 100 if len(c) >= 63 else 0
-        if ret_3m > 40:
-            score += 4
-            conditions.append(f"3-month return: +{ret_3m:.1f}% — exceptional 3m strength, institutional-grade leader")
-        elif ret_3m > 20:
-            score += 3
-            conditions.append(f"3-month return: +{ret_3m:.1f}% — solid 3m performer, above the crowd")
-        else:
-            score += 0
-            conditions.append(f"3-month return: {ret_3m:.1f}% — 3m performance not exceptional")
-
-        # 6-month return (0-3 pts)
-        ret_6m = (float(c.iloc[-1]) / float(c.iloc[-126]) - 1) * 100 if len(c) >= 126 else 0
-        if ret_6m > 60:
-            score += 3
-            conditions.append(f"6-month return: +{ret_6m:.1f}% — dominant 6m leader, top 1–2% territory")
-        elif ret_6m > 30:
-            score += 2
-            conditions.append(f"6-month return: +{ret_6m:.1f}% — strong 6m performer")
-        else:
-            score += 0
-            conditions.append(f"6-month return: {ret_6m:.1f}% — 6m performance not in leading tier")
+        except Exception as e:
+            return {'score': 5, 'max': 10, 'status': 'NEUTRAL', 
+                    'conditions': [f'Error calculating RS Rating: {e} — defaulting to neutral']}
 
         pct    = score / 10
         status = "SUPPORTIVE" if pct >= 0.65 else "NEUTRAL" if pct >= 0.35 else "UNSUPPORTIVE"
-        return {'score': min(10, score), 'max': 10, 'status': status, 'conditions': conditions}
+        return {'score': score, 'max': 10, 'status': status, 'conditions': conditions}
 
     # ── RATE ONE STOCK ────────────────────────────────────────────────────────
-    def rate_stock(self, ticker):
+    def rate_stock(self, ticker, spy_df=None):
         df = self.fetch_data(ticker)
         if df is None:
             return None
@@ -551,7 +531,7 @@ class BreakoutAnalyzer:
         ma_surf      = self.analyze_ma_surf(df)
         br_ready     = self.analyze_breakout_readiness(df)
         vol_sig      = self.analyze_volume_signature(df)
-        rel_str      = self.analyze_relative_strength(df)
+        rel_str      = self.analyze_relative_strength(df, spy_df)
 
         total = (prior_move['score'] + consolidation['score'] + ma_surf['score'] +
                  br_ready['score'] + vol_sig['score'] + rel_str['score'])
@@ -629,13 +609,23 @@ def main():
         return
 
     print(f"  Candidates: {', '.join(candidates)}\n")
+    
+    print("Fetching SPY data for RS calculations...", end=' ', flush=True)
+    try:
+        spy_df = yf.Ticker('SPY').history(period='2y', auto_adjust=True)
+        spy_df = spy_df if len(spy_df) >= 60 else None
+        print(f"done ({len(spy_df)} sessions).\n" if spy_df is not None else "FAILED — RS will default to neutral.\n")
+    except Exception:
+        spy_df = None
+        print("FAILED — RS will default to neutral.\n")
+        
     print(f"STEP 3 — Full Qullamaggie analysis on {len(candidates)} candidates...")
 
     analyzer = BreakoutAnalyzer()
     results  = []
 
     with ThreadPoolExecutor(max_workers=10) as ex:
-        futures = {ex.submit(analyzer.rate_stock, t): t for t in candidates}
+        futures = {ex.submit(analyzer.rate_stock, t, spy_df): t for t in candidates}
         for i, fut in enumerate(as_completed(futures), 1):
             t = futures[fut]
             try:
