@@ -42,20 +42,22 @@ html, body {
   align-items: center;
   gap: 16px;
   padding: 12px 24px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: #0c1018;
+  border-bottom: 1px solid #1c2740;
 }
 
 .site-name-link {
   font-size: 16px;
   font-weight: 700;
-  color: #e6edf3;
+  color: #f1f5f9;
   margin-right: 16px;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .site-name-link:hover {
-  color: #e6edf3;
+  color: #38bdf8;
   text-decoration: none;
 }
 
@@ -63,27 +65,30 @@ html, body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .top-site-nav a {
-  color: #8b949e;
+  color: #475569;
   text-decoration: none;
   font-size: 14px;
   padding: 7px 16px;
   border-radius: 6px;
   border: 1px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
 
 .top-site-nav a:hover {
-  color: #e6edf3;
-  border-color: #30363d;
-  background: #21262d;
+  color: #cbd5e1;
+  border-color: #1c2740;
+  background: #101520;
 }
 
 .top-site-nav a.active {
-  color: #e6edf3;
-  background: #21262d;
-  border-color: #30363d;
+  color: #f1f5f9;
+  background: #101520;
+  border-color: #1c2740;
 }
 
 /* ===== DASHBOARD GRID ===== */
