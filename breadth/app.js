@@ -301,20 +301,16 @@ function selectTicker(index) {
   document.getElementById("tvMeta").textContent = metaText;
 
   loadTVScript(() => {
-    if (tvWidget) {
-      tvWidget.setSymbol(item.symbol, "D", () => {});
-    } else {
-      document.getElementById("tvChartContainer").innerHTML = "";
-      tvWidget = new window.TradingView.widget({
-        container_id: "tvChartContainer",
-        symbol: item.symbol,
-        interval: "D",
-        theme: "dark",
-        timezone: "America/New_York",
-        autosize: true,
-        locale: "en"
-      });
-    }
+    document.getElementById("tvChartContainer").innerHTML = "";
+    tvWidget = new window.TradingView.widget({
+      container_id: "tvChartContainer",
+      symbol: item.symbol,
+      interval: "D",
+      theme: "dark",
+      timezone: "America/New_York",
+      autosize: true,
+      locale: "en"
+    });
   });
 }
 
@@ -411,26 +407,46 @@ function formatRatio(value) {
   return Number(value).toFixed(2);
 }
 
-document.getElementById("closeModal").addEventListener("click", () => {
+function closeModal() {
   document.getElementById("modal").classList.add("hidden");
-});
+  document.getElementById("tvChartContainer").innerHTML = "";
+  tvWidget = null;
+}
+
+document.getElementById("closeModal").addEventListener("click", closeModal);
 
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target.id === "modal") {
-    document.getElementById("modal").classList.add("hidden");
+    closeModal();
   }
 });
 
 document.getElementById("prevBtn").addEventListener("click", () => selectTicker(activeIndex - 1));
 document.getElementById("nextBtn").addEventListener("click", () => selectTicker(activeIndex + 1));
 
+document.getElementById("closeTrendModal").addEventListener("click", () => {
+  document.getElementById("trendModal").classList.add("hidden");
+});
+
+document.getElementById("trendModal").addEventListener("click", (e) => {
+  if (e.target.id === "trendModal") {
+    document.getElementById("trendModal").classList.add("hidden");
+  }
+});
+
 document.addEventListener("keydown", (e) => {
-  if (document.getElementById("modal").classList.contains("hidden")) return;
+  const modalOpen = !document.getElementById("modal").classList.contains("hidden");
+  const trendOpen = !document.getElementById("trendModal").classList.contains("hidden");
+
+  if (!modalOpen && !trendOpen) return;
 
   if (e.key === "Escape") {
-    document.getElementById("modal").classList.add("hidden");
+    if (modalOpen) { closeModal(); return; }
+    if (trendOpen) { document.getElementById("trendModal").classList.add("hidden"); return; }
     return;
   }
+
+  if (!modalOpen) return;
 
   if (e.key === "ArrowDown" || e.key === "ArrowRight") {
     e.preventDefault();
@@ -441,4 +457,186 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+function initHeaderClicks() {
+  const headerCols = COLUMNS.filter(c => c.key !== "nasdaq_close");
+  const ths = document.querySelectorAll("#breadthTable thead tr:nth-child(2) th");
+  ths.forEach((th, i) => {
+    const col = headerCols[i];
+    if (!col) return;
+    th.classList.add("clickable-header");
+    th.title = `View trend for ${col.label}`;
+    th.addEventListener("click", () => openTrendModal(col));
+  });
+}
+
+function openTrendModal(col) {
+  const filtered = breadthData.filter(row => String(row.date).startsWith(selectedYear));
+  const sortedAsc = [...filtered].sort((a, b) => (a.date > b.date ? 1 : -1));
+
+  const dataPoints = sortedAsc.map(row => {
+    let value;
+    if (col.type === "list") {
+      value = (row.lists?.[col.key] || []).length;
+    } else {
+      value = row[col.key];
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? { date: row.date, value: num } : null;
+  }).filter(Boolean);
+
+  document.getElementById("trendTitle").textContent = col.label;
+  document.getElementById("trendMeta").textContent =
+    `${selectedYear} · ${dataPoints.length} data point${dataPoints.length !== 1 ? "s" : ""}`;
+
+  renderTrendChart(dataPoints);
+  document.getElementById("trendModal").classList.remove("hidden");
+}
+
+function renderTrendChart(dataPoints) {
+  const container = document.getElementById("trendChartContainer");
+  container.innerHTML = "";
+
+  if (!dataPoints.length) {
+    const msg = document.createElement("p");
+    msg.style.cssText = "color:var(--muted);padding:24px;text-align:center;";
+    msg.textContent = "No data available for this period.";
+    container.appendChild(msg);
+    return;
+  }
+
+  const W = 860, H = 360;
+  const ml = 64, mr = 24, mt = 24, mb = 56;
+  const pw = W - ml - mr;
+  const ph = H - mt - mb;
+  const n = dataPoints.length;
+
+  const values = dataPoints.map(p => p.value);
+  let minV = Math.min(...values);
+  let maxV = Math.max(...values);
+  if (minV === maxV) { minV -= 1; maxV += 1; }
+  const range = maxV - minV;
+
+  const xOf = i => ml + (n > 1 ? (i / (n - 1)) * pw : pw / 2);
+  const yOf = v => mt + ph - ((v - minV) / range) * ph;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.style.display = "block";
+
+  function el(tag, attrs) {
+    const e = document.createElementNS(svgNS, tag);
+    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    return e;
+  }
+
+  // Horizontal grid lines + Y labels
+  const NUM_Y = 5;
+  for (let i = 0; i <= NUM_Y; i++) {
+    const y = mt + (i / NUM_Y) * ph;
+    const val = maxV - (i / NUM_Y) * range;
+    svg.appendChild(el("line", {
+      x1: ml, y1: y, x2: W - mr, y2: y,
+      stroke: "#30363d", "stroke-width": "1", "stroke-dasharray": i === NUM_Y ? "none" : "4 4"
+    }));
+    const lbl = el("text", {
+      x: ml - 8, y: y + 4,
+      "text-anchor": "end", fill: "#8b949e", "font-size": "11", "font-family": "inherit"
+    });
+    lbl.textContent = val % 1 === 0 ? val.toFixed(0) : val.toFixed(2);
+    svg.appendChild(lbl);
+  }
+
+  // Area fill under the line
+  const areaD = [
+    `M ${xOf(0)} ${yOf(dataPoints[0].value)}`,
+    ...dataPoints.slice(1).map((p, i) => `L ${xOf(i + 1)} ${yOf(p.value)}`),
+    `L ${xOf(n - 1)} ${mt + ph}`,
+    `L ${xOf(0)} ${mt + ph}`,
+    "Z"
+  ].join(" ");
+  svg.appendChild(el("path", {
+    d: areaD, fill: "rgba(88,166,255,0.08)", stroke: "none"
+  }));
+
+  // Line path
+  const lineD = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(p.value)}`).join(" ");
+  svg.appendChild(el("path", {
+    d: lineD, fill: "none", stroke: "#58a6ff", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round"
+  }));
+
+  // X axis labels (avoid overlap: at most 12 labels)
+  const labelStep = Math.max(1, Math.ceil(n / 12));
+  dataPoints.forEach((p, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return;
+    const x = xOf(i);
+    const lbl = el("text", {
+      x, y: H - mb + 18,
+      "text-anchor": "middle", fill: "#8b949e", "font-size": "11", "font-family": "inherit"
+    });
+    lbl.textContent = p.date.slice(5); // MM-DD
+    svg.appendChild(lbl);
+    svg.appendChild(el("line", {
+      x1: x, y1: mt + ph, x2: x, y2: mt + ph + 4,
+      stroke: "#30363d", "stroke-width": "1"
+    }));
+  });
+
+  // Tooltip overlay
+  const tooltip = document.createElement("div");
+  tooltip.className = "trend-tooltip";
+  tooltip.style.display = "none";
+  document.body.appendChild(tooltip);
+
+  // Dots with hover
+  dataPoints.forEach((p, i) => {
+    const x = xOf(i);
+    const y = yOf(p.value);
+
+    const hitArea = el("circle", {
+      cx: x, cy: y, r: "12",
+      fill: "transparent", style: "cursor:pointer"
+    });
+    const dot = el("circle", {
+      cx: x, cy: y, r: "4",
+      fill: "#58a6ff", stroke: "#0f2745", "stroke-width": "2",
+      style: "pointer-events:none"
+    });
+
+    hitArea.addEventListener("mouseenter", (evt) => {
+      dot.setAttribute("r", "6");
+      dot.setAttribute("fill", "#a5d6ff");
+      const dispVal = p.value % 1 === 0 ? p.value.toFixed(0) : p.value.toFixed(2);
+      tooltip.textContent = `${p.date}  ·  ${dispVal}`;
+      tooltip.style.display = "block";
+    });
+    hitArea.addEventListener("mousemove", (evt) => {
+      tooltip.style.left = (evt.clientX + 14) + "px";
+      tooltip.style.top = (evt.clientY - 30) + "px";
+    });
+    hitArea.addEventListener("mouseleave", () => {
+      dot.setAttribute("r", "4");
+      dot.setAttribute("fill", "#58a6ff");
+      tooltip.style.display = "none";
+    });
+
+    svg.appendChild(dot);
+    svg.appendChild(hitArea);
+  });
+
+  container.appendChild(svg);
+
+  // Remove tooltip when modal closes
+  const closeFn = () => {
+    tooltip.remove();
+    document.getElementById("closeTrendModal").removeEventListener("click", closeFn);
+    document.getElementById("trendModal").removeEventListener("click", closeFn);
+  };
+  document.getElementById("closeTrendModal").addEventListener("click", closeFn);
+  document.getElementById("trendModal").addEventListener("click", closeFn);
+}
+
 loadData();
+initHeaderClicks();
