@@ -83,13 +83,29 @@
         <button id="closeModal" class="close-btn" type="button">✕</button>
       </div>
 
-      <div class="modal-tools">
-        <input id="tickerSearch" type="text" placeholder="Filter tickers..." />
-        <button id="copyBtn" class="secondary-btn" type="button">Copy list</button>
-      </div>
+      <div class="modal-body">
+        <div class="modal-left">
+          <div class="modal-tools">
+            <input id="tickerSearch" type="text" placeholder="Filter tickers..." />
+            <button id="copyBtn" class="secondary-btn" type="button">Copy list</button>
+          </div>
+          <div id="modalCount" class="modal-count"></div>
+          <div id="tickerGrid" class="ticker-grid"></div>
+          <div class="modal-nav">
+            <button id="prevBtn" class="secondary-btn" type="button">← Prev</button>
+            <button id="nextBtn" class="secondary-btn" type="button">Next →</button>
+          </div>
+        </div>
 
-      <div id="modalCount" class="modal-count"></div>
-      <div id="tickerGrid" class="ticker-grid"></div>
+        <div class="modal-right">
+          <div class="tv-chart-header">
+            <span id="tvSymbol" class="tv-symbol"></span>
+            <span id="tvPercent" class="tv-percent"></span>
+            <span id="tvMeta" class="tv-meta"></span>
+          </div>
+          <div id="tvChartContainer"></div>
+        </div>
+      </div>
     </div>
   </div>
 
