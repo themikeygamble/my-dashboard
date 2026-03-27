@@ -252,6 +252,72 @@ function getSectorInfo(symbol) {
   };
 }
 
+let tvWidget = null;
+let tvScriptLoaded = false;
+let tvScriptLoading = false;
+let tvScriptCallbacks = [];
+let currentItems = [];
+let activeIndex = -1;
+
+function loadTVScript(cb) {
+  if (tvScriptLoaded) { cb(); return; }
+  tvScriptCallbacks.push(cb);
+  if (tvScriptLoading) return;
+  tvScriptLoading = true;
+  const s = document.createElement("script");
+  s.src = "https://s3.tradingview.com/tv.js";
+  s.onload = () => {
+    tvScriptLoaded = true;
+    tvScriptLoading = false;
+    const cbs = tvScriptCallbacks.splice(0);
+    cbs.forEach(fn => fn());
+  };
+  s.onerror = () => {
+    tvScriptLoading = false;
+    tvScriptCallbacks = [];
+  };
+  document.head.appendChild(s);
+}
+
+function selectTicker(index) {
+  if (!currentItems.length) return;
+  index = Math.max(0, Math.min(index, currentItems.length - 1));
+  activeIndex = index;
+
+  const rows = document.querySelectorAll("#tickerGrid .leaderboard-row");
+  rows.forEach((r, i) => r.classList.toggle("active", i === index));
+  if (rows[index]) rows[index].scrollIntoView({ block: "nearest" });
+
+  const item = currentItems[index];
+  const { sector, industry } = getSectorInfo(item.symbol);
+  const metaText = sector && industry ? `${sector} · ${industry}` : sector || industry || "—";
+
+  document.getElementById("tvSymbol").textContent = item.symbol;
+  const pctEl = document.getElementById("tvPercent");
+  pctEl.textContent = formatPercent(item.percent);
+  const isPos = Number.isFinite(item.percent) && item.percent > 0;
+  const isNeg = Number.isFinite(item.percent) && item.percent < 0;
+  pctEl.className = "tv-percent" + (isPos ? " positive" : isNeg ? " negative" : "");
+  document.getElementById("tvMeta").textContent = metaText;
+
+  loadTVScript(() => {
+    if (tvWidget) {
+      tvWidget.setSymbol(item.symbol, "D", () => {});
+    } else {
+      document.getElementById("tvChartContainer").innerHTML = "";
+      tvWidget = new window.TradingView.widget({
+        container_id: "tvChartContainer",
+        symbol: item.symbol,
+        interval: "D",
+        theme: "dark",
+        timezone: "America/New_York",
+        autosize: true,
+        locale: "en"
+      });
+    }
+  });
+}
+
 function renderLeaderboard(grid, items) {
   grid.innerHTML = "";
 
@@ -271,14 +337,19 @@ function renderLeaderboard(grid, items) {
       ? `${sector} · ${industry}`
       : sector || industry || "—";
 
+    const isPos = Number.isFinite(item.percent) && item.percent > 0;
+    const isNeg = Number.isFinite(item.percent) && item.percent < 0;
+    const pctClass = isPos ? " positive" : isNeg ? " negative" : "";
+
     const row = document.createElement("div");
     row.className = "leaderboard-row";
     row.innerHTML = `
       <span class="leader-rank">${index + 1}</span>
       <span class="leader-symbol">${item.symbol}</span>
       <span class="leader-meta">${metaText}</span>
-      <span class="leader-percent">${formatPercent(item.percent)}</span>
+      <span class="leader-percent${pctClass}">${formatPercent(item.percent)}</span>
     `;
+    row.addEventListener("click", () => selectTicker(index));
     grid.appendChild(row);
   });
 }
@@ -299,9 +370,10 @@ function openModal(date, label, rawItems) {
   const baseItems = normalizeListItems(rawItems);
 
   const refresh = (itemsToRender) => {
-    const sorted = sortLeaderboardItems(itemsToRender);
-    count.textContent = `${sorted.length.toLocaleString()} symbols`;
-    renderLeaderboard(grid, sorted);
+    currentItems = sortLeaderboardItems(itemsToRender);
+    count.textContent = `${currentItems.length.toLocaleString()} symbols`;
+    renderLeaderboard(grid, currentItems);
+    selectTicker(0);
   };
 
   refresh(baseItems);
@@ -346,6 +418,26 @@ document.getElementById("closeModal").addEventListener("click", () => {
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target.id === "modal") {
     document.getElementById("modal").classList.add("hidden");
+  }
+});
+
+document.getElementById("prevBtn").addEventListener("click", () => selectTicker(activeIndex - 1));
+document.getElementById("nextBtn").addEventListener("click", () => selectTicker(activeIndex + 1));
+
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("modal").classList.contains("hidden")) return;
+
+  if (e.key === "Escape") {
+    document.getElementById("modal").classList.add("hidden");
+    return;
+  }
+
+  if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+    e.preventDefault();
+    selectTicker(activeIndex + 1);
+  } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+    e.preventDefault();
+    selectTicker(activeIndex - 1);
   }
 });
 
