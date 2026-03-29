@@ -492,6 +492,17 @@ function openTrendModal(col) {
   document.getElementById("trendModal").classList.remove("hidden");
 }
 
+function calculateSMA(data, period) {
+  return data.map((point, index, arr) => {
+    if (index < period - 1) return null; 
+    let sum = 0;
+    for (let i = 0; i < period; i++) {
+      sum += arr[index - i].value;
+    }
+    return sum / period;
+  });
+}
+
 function renderTrendChart(dataPoints) {
   const container = document.getElementById("trendChartContainer");
   container.innerHTML = "";
@@ -566,6 +577,47 @@ function renderTrendChart(dataPoints) {
   svg.appendChild(el("path", {
     d: lineD, fill: "none", stroke: "#58a6ff", "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round"
   }));
+
+  // --- Start Added Code: Moving Averages ---
+  const sma10 = calculateSMA(dataPoints, 10);
+  const sma20 = calculateSMA(dataPoints, 20);
+
+  // Draw 10 SMA (Purple)
+  const sma10D = sma10.map((v, i) => {
+    if (v === null) return '';
+    const prefix = (i === 9 || sma10[i - 1] === null) ? 'M' : 'L';
+    return `${prefix} ${xOf(i)} ${yOf(v)}`;
+  }).join(' ').trim();
+
+  if (sma10D) {
+    svg.appendChild(el('path', { 
+      d: sma10D, 
+      fill: 'none', 
+      stroke: '#bf73ff', // Purple
+      'stroke-width': '1.5', 
+      'stroke-linejoin': 'round', 
+      'stroke-linecap': 'round' 
+    }));
+  }
+
+  // Draw 20 SMA (Yellow)
+  const sma20D = sma20.map((v, i) => {
+    if (v === null) return '';
+    const prefix = (i === 19 || sma20[i - 1] === null) ? 'M' : 'L';
+    return `${prefix} ${xOf(i)} ${yOf(v)}`;
+  }).join(' ').trim();
+
+  if (sma20D) {
+    svg.appendChild(el('path', { 
+      d: sma20D, 
+      fill: 'none', 
+      stroke: '#f1e05a', // Yellow
+      'stroke-width': '1.5', 
+      'stroke-linejoin': 'round', 
+      'stroke-linecap': 'round' 
+    }));
+  }
+  // --- End Added Code ---
 
   // X axis labels (avoid overlap: at most 12 labels)
   const labelStep = Math.max(1, Math.ceil(n / 12));
