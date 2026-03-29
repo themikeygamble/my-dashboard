@@ -582,34 +582,32 @@ function renderTrendChart(dataPoints) {
   const sma10 = calculateSMA(dataPoints, 10);
   const sma20 = calculateSMA(dataPoints, 20);
 
-  // Draw 10 SMA (Purple)
-  const sma10D = sma10.map((v, i) => {
-    if (v === null) return '';
-    const prefix = (i === 9 || sma10[i - 1] === null) ? 'M' : 'L';
-    return `${prefix} ${xOf(i)} ${yOf(v)}`;
-  }).join(' ').trim();
+  // Helper to safely build SVG paths
+  const createPath = (smaArray) => {
+    return smaArray.map((v, i) => {
+      if (v === null) return null;
+      // Start a new path (M) if it's the first valid point
+      const prefix = (i === 0 || smaArray[i - 1] === null) ? 'M' : 'L';
+      return `${prefix} ${xOf(i)} ${yOf(v)}`;
+    }).filter(Boolean).join(' '); // .filter(Boolean) removes all empty spaces safely
+  };
 
-  if (sma10D) {
+  const sma10Path = createPath(sma10);
+  if (sma10Path) {
     svg.appendChild(el('path', { 
-      d: sma10D, 
+      d: sma10Path, 
       fill: 'none', 
       stroke: '#bf73ff', // Purple
-      'stroke-width': '1.5', 
+      'stroke-width': '1.5', // Bumped up slightly so it's easier to see
       'stroke-linejoin': 'round', 
       'stroke-linecap': 'round' 
     }));
   }
 
-  // Draw 20 SMA (Yellow)
-  const sma20D = sma20.map((v, i) => {
-    if (v === null) return '';
-    const prefix = (i === 19 || sma20[i - 1] === null) ? 'M' : 'L';
-    return `${prefix} ${xOf(i)} ${yOf(v)}`;
-  }).join(' ').trim();
-
-  if (sma20D) {
+  const sma20Path = createPath(sma20);
+  if (sma20Path) {
     svg.appendChild(el('path', { 
-      d: sma20D, 
+      d: sma20Path, 
       fill: 'none', 
       stroke: '#f1e05a', // Yellow
       'stroke-width': '1.5', 
