@@ -28,7 +28,7 @@ FLOW_MAX_DAYS = 390
 NOW_UTC = datetime.now(timezone.utc)
 
 SEC_REQUEST_NAME = os.getenv("SEC_REQUEST_NAME", "themikeygamble fundamentals tracker")
-SEC_REQUEST_EMAIL = os.getenv("SEC_REQUEST_EMAIL", "mikeygamble@users.noreply.github.com")
+SEC_REQUEST_EMAIL = os.getenv("SEC_REQUEST_EMAIL", "kappakirby@gmail.com")
 SEC_FROM_HEADER = os.getenv("SEC_FROM_HEADER", SEC_REQUEST_EMAIL)
 SEC_REQUEST_IDENTITY = " ".join(part for part in [SEC_REQUEST_NAME.strip(), SEC_REQUEST_EMAIL.strip()] if part)
 
