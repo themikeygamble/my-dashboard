@@ -4,8 +4,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
-
 import requests
 
 BREADTH_PATH = Path("data/breadth-history.json")
@@ -19,6 +17,8 @@ MAX_SYMBOLS = int(os.getenv("FUNDAMENTALS_MAX_SYMBOLS", "300"))
 MAX_PERIODS = int(os.getenv("FUNDAMENTALS_MAX_PERIODS", "6"))
 REFRESH_AFTER_DAYS = int(os.getenv("FUNDAMENTALS_REFRESH_AFTER_DAYS", "14"))
 REQUEST_SLEEP = float(os.getenv("FUNDAMENTALS_REQUEST_SLEEP", "0.2"))
+REQUEST_RETRIES = int(os.getenv("FUNDAMENTALS_REQUEST_RETRIES", "3"))
+RETRY_BACKOFF_SECONDS = float(os.getenv("FUNDAMENTALS_RETRY_BACKOFF_SECONDS", "1.5"))
 
 ANNUAL_FORMS = {"10-K", "10-K/A", "20-F", "20-F/A", "40-F", "40-F/A"}
 FLOW_MIN_DAYS = 300
@@ -28,16 +28,19 @@ NOW_UTC = datetime.now(timezone.utc)
 SEC_REQUEST_NAME = os.getenv("SEC_REQUEST_NAME", "themikeygamble fundamentals tracker")
 SEC_REQUEST_EMAIL = os.getenv("SEC_REQUEST_EMAIL", "mikeygamble@users.noreply.github.com")
 SEC_FROM_HEADER = os.getenv("SEC_FROM_HEADER", SEC_REQUEST_EMAIL)
+SEC_REQUEST_IDENTITY = " ".join(part for part in [SEC_REQUEST_NAME.strip(), SEC_REQUEST_EMAIL.strip()] if part)
 
 SESSION = requests.Session()
-SESSION.headers.update({
-    "User-Agent": f"{SEC_REQUEST_NAME} ({SEC_REQUEST_EMAIL})",
-    "From": SEC_FROM_HEADER,
+base_headers = {
+    "User-Agent": SEC_REQUEST_IDENTITY or "my-dashboard fundamentals",
     "Accept-Encoding": "gzip, deflate",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
-})
+}
+if SEC_FROM_HEADER.strip():
+    base_headers["From"] = SEC_FROM_HEADER.strip()
+SESSION.headers.update(base_headers)
 
 METRIC_SPECS = {
     "revenue": {
@@ -149,17 +152,25 @@ def save_json(path, payload):
 
 
 def fetch_json(url):
-    parsed = urlparse(url)
-    response = SESSION.get(
-        url,
-        timeout=90,
-        headers={
-            "Host": parsed.netloc,
-            "Referer": f"{parsed.scheme}://{parsed.netloc}/",
-        },
-    )
-    response.raise_for_status()
-    return response.json()
+    transient_statuses = {403, 429, 500, 502, 503, 504}
+    for attempt in range(1, REQUEST_RETRIES + 1):
+        try:
+            response = SESSION.get(url, timeout=90)
+            response.raise_for_status()
+            return response.json()
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code not in transient_statuses or attempt == REQUEST_RETRIES:
+                raise
+            sleep_seconds = RETRY_BACKOFF_SECONDS * attempt
+            print(f"Request failed ({status_code}) for {url}; retrying in {sleep_seconds:.1f}s ({attempt}/{REQUEST_RETRIES})")
+            time.sleep(sleep_seconds)
+        except requests.RequestException:
+            if attempt == REQUEST_RETRIES:
+                raise
+            sleep_seconds = RETRY_BACKOFF_SECONDS * attempt
+            print(f"Request error for {url}; retrying in {sleep_seconds:.1f}s ({attempt}/{REQUEST_RETRIES})")
+            time.sleep(sleep_seconds)
 
 
 def derive_universe(breadth_payload):
