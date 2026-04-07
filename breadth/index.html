@@ -12,7 +12,6 @@
     <nav>
       <a href="../sectors/">Sector Rotation</a>
       <a href="./" class="active">US Market Breadth</a>
-      <a href="../fundamentals/">Fundamentals</a>
       <a href="../swing/">Swing Scanner</a>
     </nav>
   </header>
@@ -100,11 +99,74 @@
 
         <div class="modal-right">
           <div class="tv-chart-header">
-            <span id="tvSymbol" class="tv-symbol"></span>
-            <span id="tvPercent" class="tv-percent"></span>
-            <span id="tvMeta" class="tv-meta"></span>
+            <div class="tv-chart-title">
+              <span id="tvSymbol" class="tv-symbol"></span>
+              <span id="tvPercent" class="tv-percent"></span>
+              <span id="tvMeta" class="tv-meta"></span>
+            </div>
+            <div class="modal-pane-tabs">
+              <button id="chartPaneBtn" class="pane-tab active" type="button">Chart</button>
+              <button id="fundamentalsPaneBtn" class="pane-tab" type="button">Fundamental</button>
+            </div>
           </div>
-          <div id="tvChartContainer"></div>
+          <div id="chartPane" class="modal-pane">
+            <div id="tvChartContainer"></div>
+          </div>
+          <div id="fundamentalsPane" class="modal-pane hidden">
+            <div id="fundamentalsEmptyState" class="chart-empty compact-empty">Select a ticker to load fundamentals.</div>
+            <div id="fundamentalsContent" class="hidden">
+              <div class="fundamentals-summary">
+                <div class="summary-inline-card">
+                  <span class="summary-kicker">Company</span>
+                  <strong id="fundCompanyName">--</strong>
+                  <p id="fundCompanyMeta" class="summary-note">--</p>
+                </div>
+                <div class="summary-inline-grid">
+                  <div class="mini-stat">
+                    <span class="summary-kicker">FY</span>
+                    <strong id="fundLatestFiscalYear">--</strong>
+                  </div>
+                  <div class="mini-stat">
+                    <span class="summary-kicker">Filed</span>
+                    <strong id="fundLastFiled">--</strong>
+                  </div>
+                  <div class="mini-stat">
+                    <span class="summary-kicker">Hits</span>
+                    <strong id="fundBreadthHits">--</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="fundamentals-context-wrap">
+                <div id="fundBreadthContext" class="context-list compact-context"></div>
+              </div>
+              <div class="fundamentals-chart-sections">
+                <section class="metric-group compact-group">
+                  <div class="section-head compact-head">
+                    <div>
+                      <h3>Income Statement</h3>
+                    </div>
+                  </div>
+                  <div id="incomeCharts" class="chart-grid compact-grid"></div>
+                </section>
+                <section class="metric-group compact-group">
+                  <div class="section-head compact-head">
+                    <div>
+                      <h3>Balance Sheet</h3>
+                    </div>
+                  </div>
+                  <div id="balanceCharts" class="chart-grid compact-grid"></div>
+                </section>
+                <section class="metric-group compact-group">
+                  <div class="section-head compact-head">
+                    <div>
+                      <h3>Margins</h3>
+                    </div>
+                  </div>
+                  <div id="marginCharts" class="chart-grid compact-grid"></div>
+                </section>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -124,5 +186,6 @@
   </div>
 
   <script src="./app.js"></script>
+  <script src="./fundamentals.js"></script>
 </body>
 </html>
