@@ -640,7 +640,9 @@ tbody td:first-child {
 
 #tvChartContainer {
   flex: 1;
-  min-height: 300px;
+  min-height: 420px;
+  width: 100%;
+  height: 100%;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -766,6 +768,17 @@ tbody td:first-child {
 
 .modal-pane.hidden {
   display: none;
+}
+
+.modal-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#chartPane {
+  min-height: 0;
 }
 
 #fundamentalsPane {
@@ -1106,6 +1119,10 @@ tbody td:first-child {
     min-height: 320px;
   }
 
+  #tvChartContainer {
+    min-height: 360px;
+  }
+
   .summary-grid,
   .chart-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1140,6 +1157,10 @@ tbody td:first-child {
 
   .modal-card {
     padding: 14px;
+  }
+
+  #tvChartContainer {
+    min-height: 300px;
   }
 
   .leaderboard-head,

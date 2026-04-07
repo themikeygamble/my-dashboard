@@ -10,6 +10,8 @@ BREADTH_PATH = Path("data/breadth-history.json")
 OUTPUT_PATH = Path("data/fundamentals.json")
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+TICKERS_EXCHANGE_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
+TICKERS_TXT_URL = "https://www.sec.gov/include/ticker.txt"
 COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
 LOOKBACK_ROWS = int(os.getenv("FUNDAMENTALS_LOOKBACK_ROWS", "45"))
@@ -151,13 +153,13 @@ def save_json(path, payload):
         json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))
 
 
-def fetch_json(url):
+def fetch_response(url):
     transient_statuses = {403, 429, 500, 502, 503, 504}
     for attempt in range(1, REQUEST_RETRIES + 1):
         try:
             response = SESSION.get(url, timeout=90)
             response.raise_for_status()
-            return response.json()
+            return response
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response is not None else None
             if status_code not in transient_statuses or attempt == REQUEST_RETRIES:
@@ -171,6 +173,14 @@ def fetch_json(url):
             sleep_seconds = RETRY_BACKOFF_SECONDS * attempt
             print(f"Request error for {url}; retrying in {sleep_seconds:.1f}s ({attempt}/{REQUEST_RETRIES})")
             time.sleep(sleep_seconds)
+
+
+def fetch_json(url):
+    return fetch_response(url).json()
+
+
+def fetch_text(url):
+    return fetch_response(url).text
 
 
 def derive_universe(breadth_payload):
@@ -208,30 +218,87 @@ def build_ticker_mapping(cik, company_name):
     }
 
 
-def load_ticker_map(existing_symbols=None):
+def parse_company_tickers_json(payload):
     mapping = {}
-    try:
-        payload = fetch_json(TICKERS_URL)
-        entries = payload.values() if isinstance(payload, dict) else payload
-        for item in entries:
-            symbol = str(item.get("ticker", "")).strip().upper()
-            cik = str(item.get("cik_str", "")).strip()
-            if symbol and cik:
-                mapping[symbol] = build_ticker_mapping(cik, item.get("title", ""))
-        print(f"Loaded {len(mapping)} SEC ticker mappings")
-    except requests.RequestException as exc:
-        print(
-            f"Failed to load SEC ticker mappings ({type(exc).__name__}): {exc}. "
-            "Falling back to cached mappings from existing fundamentals data."
-        )
-    except ValueError as exc:
-        print(
-            f"Failed to parse SEC ticker mappings ({type(exc).__name__}): {exc}. "
-            "Falling back to cached mappings from existing fundamentals data."
-        )
+    entries = payload.values() if isinstance(payload, dict) else payload
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get("ticker", "")).strip().upper()
+        cik_value = item.get("cik_str")
+        if cik_value in (None, ""):
+            cik_value = item.get("cik")
+        cik = str(cik_value if cik_value is not None else "").strip()
+        name_value = item.get("title")
+        if name_value in (None, ""):
+            name_value = item.get("name")
+        if symbol and cik:
+            mapping[symbol] = build_ticker_mapping(cik, name_value or "")
+    return mapping
 
-    if mapping:
-        return mapping
+
+def parse_company_tickers_exchange_json(payload):
+    if not isinstance(payload, dict):
+        return {}
+    fields = payload.get("fields") or []
+    data_rows = payload.get("data") or []
+    if not fields or not data_rows:
+        return {}
+
+    field_index = {name: index for index, name in enumerate(fields)}
+    ticker_index = field_index.get("ticker")
+    cik_index = field_index.get("cik")
+    name_index = field_index.get("name")
+    if ticker_index is None or cik_index is None:
+        return {}
+
+    mapping = {}
+    for row in data_rows:
+        if not isinstance(row, (list, tuple)):
+            continue
+        symbol = str(row[ticker_index]).strip().upper() if len(row) > ticker_index else ""
+        cik = str(row[cik_index]).strip() if len(row) > cik_index else ""
+        company_name = str(row[name_index]).strip() if name_index is not None and len(row) > name_index else ""
+        if symbol and cik:
+            mapping[symbol] = build_ticker_mapping(cik, company_name)
+    return mapping
+
+
+def parse_ticker_txt(payload):
+    mapping = {}
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        symbol = parts[0].strip().upper()
+        cik = parts[1].strip()
+        if symbol and cik:
+            mapping[symbol] = build_ticker_mapping(cik, "")
+    return mapping
+
+
+def load_ticker_map(existing_symbols=None):
+    sources = [
+        ("JSON", TICKERS_URL, fetch_json, parse_company_tickers_json),
+        ("Exchange JSON", TICKERS_EXCHANGE_URL, fetch_json, parse_company_tickers_exchange_json),
+        ("Ticker TXT", TICKERS_TXT_URL, fetch_text, parse_ticker_txt),
+    ]
+
+    for source_name, source_url, fetcher, parser in sources:
+        try:
+            payload = fetcher(source_url)
+            mapping = parser(payload)
+            if mapping:
+                print(f"Loaded {len(mapping)} SEC ticker mappings from {source_name} source")
+                return mapping
+            print(f"SEC ticker mapping source returned no rows: {source_name}")
+        except requests.RequestException as exc:
+            print(f"Failed SEC ticker mapping source {source_name} ({type(exc).__name__}): {exc}")
+        except ValueError as exc:
+            print(f"Failed to parse SEC ticker mapping source {source_name} ({type(exc).__name__}): {exc}")
 
     fallback_mapping = {}
     for symbol, payload in (existing_symbols or {}).items():
