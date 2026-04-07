@@ -225,9 +225,15 @@ def parse_company_tickers_json(payload):
         if not isinstance(item, dict):
             continue
         symbol = str(item.get("ticker", "")).strip().upper()
-        cik = str(item.get("cik_str", "") or item.get("cik", "")).strip()
+        cik_value = item.get("cik_str")
+        if cik_value in (None, ""):
+            cik_value = item.get("cik")
+        cik = str(cik_value if cik_value is not None else "").strip()
+        name_value = item.get("title")
+        if name_value in (None, ""):
+            name_value = item.get("name")
         if symbol and cik:
-            mapping[symbol] = build_ticker_mapping(cik, item.get("title") or item.get("name") or "")
+            mapping[symbol] = build_ticker_mapping(cik, name_value or "")
     return mapping
 
 
