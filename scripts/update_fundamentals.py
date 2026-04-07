@@ -201,22 +201,41 @@ def normalize_symbol(item):
     return str(symbol).strip().upper()
 
 
-def load_ticker_map():
-    payload = fetch_json(TICKERS_URL)
+def load_ticker_map(existing_symbols=None):
     mapping = {}
+    try:
+        payload = fetch_json(TICKERS_URL)
+        entries = payload.values() if isinstance(payload, dict) else payload
+        for item in entries:
+            symbol = str(item.get("ticker", "")).strip().upper()
+            cik = str(item.get("cik_str", "")).strip()
+            if symbol and cik:
+                mapping[symbol] = {
+                    "cik": cik.zfill(10),
+                    "company_name": item.get("title", "").strip(),
+                }
+        print(f"Loaded {len(mapping)} SEC ticker mappings")
+    except Exception as exc:
+        print(f"Failed to load SEC ticker mappings: {exc}")
 
-    entries = payload.values() if isinstance(payload, dict) else payload
-    for item in entries:
-        symbol = str(item.get("ticker", "")).strip().upper()
-        cik = str(item.get("cik_str", "")).strip()
-        if symbol and cik:
-            mapping[symbol] = {
-                "cik": cik.zfill(10),
-                "company_name": item.get("title", "").strip(),
-            }
+    if mapping:
+        return mapping
 
-    print(f"Loaded {len(mapping)} SEC ticker mappings")
-    return mapping
+    fallback_mapping = {}
+    for symbol, payload in (existing_symbols or {}).items():
+        cik = str(payload.get("cik", "")).strip()
+        if not cik:
+            continue
+        fallback_mapping[symbol] = {
+            "cik": cik.zfill(10),
+            "company_name": payload.get("company_name", "").strip(),
+        }
+
+    if fallback_mapping:
+        print(f"Using {len(fallback_mapping)} cached ticker mappings from existing fundamentals data")
+    else:
+        print("No cached ticker mappings available; fundamentals refresh will be skipped for this run")
+    return fallback_mapping
 
 
 def should_refresh(existing_entry):
@@ -425,7 +444,7 @@ def main():
     existing_symbols = existing_payload.get("symbols", {})
 
     universe = derive_universe(breadth_payload)
-    ticker_map = load_ticker_map()
+    ticker_map = load_ticker_map(existing_symbols)
 
     output_symbols = {}
     requested = 0
