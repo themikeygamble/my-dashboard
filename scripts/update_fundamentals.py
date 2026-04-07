@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -24,11 +25,18 @@ FLOW_MIN_DAYS = 300
 FLOW_MAX_DAYS = 390
 NOW_UTC = datetime.now(timezone.utc)
 
+SEC_REQUEST_NAME = os.getenv("SEC_REQUEST_NAME", "themikeygamble fundamentals tracker")
+SEC_REQUEST_EMAIL = os.getenv("SEC_REQUEST_EMAIL", "mikeygamble@users.noreply.github.com")
+SEC_FROM_HEADER = os.getenv("SEC_FROM_HEADER", SEC_REQUEST_EMAIL)
+
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "themikeygamble fundamentals tracker (public GitHub project) contact: github-actions",
+    "User-Agent": f"{SEC_REQUEST_NAME} ({SEC_REQUEST_EMAIL})",
+    "From": SEC_FROM_HEADER,
     "Accept-Encoding": "gzip, deflate",
     "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
 })
 
 METRIC_SPECS = {
@@ -141,7 +149,15 @@ def save_json(path, payload):
 
 
 def fetch_json(url):
-    response = SESSION.get(url, timeout=90)
+    parsed = urlparse(url)
+    response = SESSION.get(
+        url,
+        timeout=90,
+        headers={
+            "Host": parsed.netloc,
+            "Referer": f"{parsed.scheme}://{parsed.netloc}/",
+        },
+    )
     response.raise_for_status()
     return response.json()
 
