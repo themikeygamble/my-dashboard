@@ -220,7 +220,7 @@ def load_ticker_map(existing_symbols=None):
                 mapping[symbol] = build_ticker_mapping(cik, item.get("title", ""))
         print(f"Loaded {len(mapping)} SEC ticker mappings")
     except Exception as exc:
-        print(f"Failed to load SEC ticker mappings: {exc}")
+        print(f"Failed to load SEC ticker mappings: {exc}. Falling back to cached mappings from existing fundamentals data.")
 
     if mapping:
         return mapping
