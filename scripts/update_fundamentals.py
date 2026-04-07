@@ -201,22 +201,52 @@ def normalize_symbol(item):
     return str(symbol).strip().upper()
 
 
-def load_ticker_map():
-    payload = fetch_json(TICKERS_URL)
+def build_ticker_mapping(cik, company_name):
+    return {
+        "cik": str(cik).strip().zfill(10),
+        "company_name": str(company_name or "").strip(),
+    }
+
+
+def load_ticker_map(existing_symbols=None):
     mapping = {}
+    try:
+        payload = fetch_json(TICKERS_URL)
+        entries = payload.values() if isinstance(payload, dict) else payload
+        for item in entries:
+            symbol = str(item.get("ticker", "")).strip().upper()
+            cik = str(item.get("cik_str", "")).strip()
+            if symbol and cik:
+                mapping[symbol] = build_ticker_mapping(cik, item.get("title", ""))
+        print(f"Loaded {len(mapping)} SEC ticker mappings")
+    except requests.RequestException as exc:
+        print(
+            f"Failed to load SEC ticker mappings ({type(exc).__name__}): {exc}. "
+            "Falling back to cached mappings from existing fundamentals data."
+        )
+    except ValueError as exc:
+        print(
+            f"Failed to parse SEC ticker mappings ({type(exc).__name__}): {exc}. "
+            "Falling back to cached mappings from existing fundamentals data."
+        )
 
-    entries = payload.values() if isinstance(payload, dict) else payload
-    for item in entries:
-        symbol = str(item.get("ticker", "")).strip().upper()
-        cik = str(item.get("cik_str", "")).strip()
-        if symbol and cik:
-            mapping[symbol] = {
-                "cik": cik.zfill(10),
-                "company_name": item.get("title", "").strip(),
-            }
+    if mapping:
+        return mapping
 
-    print(f"Loaded {len(mapping)} SEC ticker mappings")
-    return mapping
+    fallback_mapping = {}
+    for symbol, payload in (existing_symbols or {}).items():
+        if not isinstance(payload, dict):
+            continue
+        cik = str(payload.get("cik", "")).strip()
+        if not cik:
+            continue
+        fallback_mapping[symbol] = build_ticker_mapping(cik, payload.get("company_name", ""))
+
+    if fallback_mapping:
+        print(f"Using {len(fallback_mapping)} cached ticker mappings from existing fundamentals data")
+    else:
+        print("No cached ticker mappings available; symbols without mappings will be skipped this run")
+    return fallback_mapping
 
 
 def should_refresh(existing_entry):
@@ -425,7 +455,7 @@ def main():
     existing_symbols = existing_payload.get("symbols", {})
 
     universe = derive_universe(breadth_payload)
-    ticker_map = load_ticker_map()
+    ticker_map = load_ticker_map(existing_symbols)
 
     output_symbols = {}
     requested = 0
