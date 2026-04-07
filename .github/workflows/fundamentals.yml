@@ -30,8 +30,8 @@ jobs:
         run: python scripts/update_fundamentals.py
         env:
           SEC_REQUEST_NAME: "themikeygamble fundamentals tracker"
-          SEC_REQUEST_EMAIL: "mikeygamble@users.noreply.github.com"
-          SEC_FROM_HEADER: "mikeygamble@users.noreply.github.com"
+          SEC_REQUEST_EMAIL: "kappakirby@gmail.com"
+          SEC_FROM_HEADER: "kappakirby@gmail.com"
 
       - name: Commit updated data
         run: |
