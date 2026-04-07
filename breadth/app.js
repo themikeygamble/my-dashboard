@@ -299,6 +299,9 @@ function selectTicker(index) {
   const isNeg = Number.isFinite(item.percent) && item.percent < 0;
   pctEl.className = "tv-percent" + (isPos ? " positive" : isNeg ? " negative" : "");
   document.getElementById("tvMeta").textContent = metaText;
+  if (window.BREADTH_MODAL_FUNDAMENTALS) {
+    window.BREADTH_MODAL_FUNDAMENTALS.showSymbol(item.symbol);
+  }
 
   loadTVScript(() => {
     document.getElementById("tvChartContainer").innerHTML = "";
@@ -411,6 +414,9 @@ function closeModal() {
   document.getElementById("modal").classList.add("hidden");
   document.getElementById("tvChartContainer").innerHTML = "";
   tvWidget = null;
+  if (window.BREADTH_MODAL_FUNDAMENTALS) {
+    window.BREADTH_MODAL_FUNDAMENTALS.close();
+  }
 }
 
 document.getElementById("closeModal").addEventListener("click", closeModal);
