@@ -235,6 +235,8 @@ def load_ticker_map(existing_symbols=None):
 
     fallback_mapping = {}
     for symbol, payload in (existing_symbols or {}).items():
+        if not isinstance(payload, dict):
+            continue
         cik = str(payload.get("cik", "")).strip()
         if not cik:
             continue
