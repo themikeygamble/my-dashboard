@@ -1,1 +1,9 @@
-{"generated_at_utc":"2026-04-07T21:54:54.003379+00:00","meta":{"source":"SEC EDGAR companyfacts","universe_source":"Breadth-derived watchlist","lookback_rows":45,"max_symbols":300,"refresh_after_days":14},"symbols":{}}
+{
+  "generated_at_utc": null,
+  "meta": {
+    "source": "SEC EDGAR companyfacts",
+    "universe_source": "Breadth-derived watchlist",
+    "max_symbols": 300
+  },
+  "symbols": {}
+}

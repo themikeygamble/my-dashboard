@@ -201,6 +201,13 @@ def normalize_symbol(item):
     return str(symbol).strip().upper()
 
 
+def build_ticker_mapping(cik, company_name):
+    return {
+        "cik": str(cik).strip().zfill(10),
+        "company_name": str(company_name or "").strip(),
+    }
+
+
 def load_ticker_map(existing_symbols=None):
     mapping = {}
     try:
@@ -210,10 +217,7 @@ def load_ticker_map(existing_symbols=None):
             symbol = str(item.get("ticker", "")).strip().upper()
             cik = str(item.get("cik_str", "")).strip()
             if symbol and cik:
-                mapping[symbol] = {
-                    "cik": cik.zfill(10),
-                    "company_name": item.get("title", "").strip(),
-                }
+                mapping[symbol] = build_ticker_mapping(cik, item.get("title", ""))
         print(f"Loaded {len(mapping)} SEC ticker mappings")
     except Exception as exc:
         print(f"Failed to load SEC ticker mappings: {exc}")
@@ -226,15 +230,12 @@ def load_ticker_map(existing_symbols=None):
         cik = str(payload.get("cik", "")).strip()
         if not cik:
             continue
-        fallback_mapping[symbol] = {
-            "cik": cik.zfill(10),
-            "company_name": payload.get("company_name", "").strip(),
-        }
+        fallback_mapping[symbol] = build_ticker_mapping(cik, payload.get("company_name", ""))
 
     if fallback_mapping:
         print(f"Using {len(fallback_mapping)} cached ticker mappings from existing fundamentals data")
     else:
-        print("No cached ticker mappings available; fundamentals refresh will be skipped for this run")
+        print("No cached ticker mappings available; symbols without mappings will be skipped this run")
     return fallback_mapping
 
 
