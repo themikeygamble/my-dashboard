@@ -670,6 +670,8 @@ tbody td:first-child {
   color: var(--blue-3);
   border-color: var(--blue-2);
 }
+
+.ticker-grid {
   display: flex;
   flex-direction: column;
   gap: 8px;

@@ -244,8 +244,8 @@ def extract_batch_history(batch_symbols, start_date, end_date):
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
     out["adj_close"] = pd.to_numeric(out["adj_close"], errors="coerce")
     out["volume"] = pd.to_numeric(out["volume"], errors="coerce").fillna(0)
-    out["high"] = pd.to_numeric(out.get("high", float("nan")), errors="coerce")
-    out["low"] = pd.to_numeric(out.get("low", float("nan")), errors="coerce")
+    out["high"] = pd.to_numeric(out["high"] if "high" in out.columns else float("nan"), errors="coerce")
+    out["low"] = pd.to_numeric(out["low"] if "low" in out.columns else float("nan"), errors="coerce")
     out = out.dropna(subset=["date", "symbol", "close", "adj_close"]).copy()
 
     return out
@@ -397,10 +397,10 @@ def build_ranked_list(day_df, flag_col, ret_col):
         }
         if has_dv:
             dv = getattr(row, "dollar_volume", None)
-            entry["dollar_volume"] = None if dv is None or (isinstance(dv, float) and math.isnan(dv)) else round(float(dv), 0)
+            entry["dollar_volume"] = None if pd.isna(dv) else round(float(dv), 0)
         if has_adr:
             adr = getattr(row, "adr_pct", None)
-            entry["adr_pct"] = None if adr is None or (isinstance(adr, float) and math.isnan(adr)) else round(float(adr), 2)
+            entry["adr_pct"] = None if pd.isna(adr) else round(float(adr), 2)
         result.append(entry)
     return result
 
