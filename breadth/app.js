@@ -233,7 +233,7 @@ function formatPercent(value) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-function formatAdr(value) {
+function formatAdrPercent(value) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return `${value.toFixed(2)}%`;
 }
@@ -513,7 +513,7 @@ function buildGroupDetailTable(group) {
 
     const adrTd = document.createElement("td");
     adrTd.className = "num";
-    adrTd.textContent = formatAdr(item.adr_pct);
+    adrTd.textContent = formatAdrPercent(item.adr_pct);
     row.appendChild(adrTd);
 
     const pctTd = document.createElement("td");
@@ -569,7 +569,7 @@ function renderGroupModal(groups, groupLabel) {
     toggleBtn.className = "toggle-btn";
     toggleBtn.type = "button";
     toggleBtn.setAttribute("aria-expanded", "false");
-    toggleBtn.setAttribute("aria-label", "Toggle group details");
+    toggleBtn.setAttribute("aria-label", `Toggle ${group.name} details`);
     toggleBtn.innerHTML = `<svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
     const nameSpan = document.createElement("span");
