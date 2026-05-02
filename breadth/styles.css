@@ -444,6 +444,9 @@ tbody td:first-child {
 }
 
 .view-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: #0f1722;
   color: var(--muted);
@@ -453,6 +456,7 @@ tbody td:first-child {
   font: inherit;
   font-weight: 700;
   font-size: 13px;
+  text-decoration: none;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
