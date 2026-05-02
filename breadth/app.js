@@ -233,6 +233,11 @@ function formatPercent(value) {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
+function formatAdr(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)}%`;
+}
+
 function sortLeaderboardItems(items) {
   return [...items].sort((a, b) => {
     const aMag = Number.isFinite(a.percent) ? Math.abs(a.percent) : -Infinity;
@@ -258,6 +263,9 @@ let tvScriptLoaded = false;
 let tvScriptLoading = false;
 let tvScriptCallbacks = [];
 let currentItems = [];
+let currentBaseItems = [];
+let currentModalDate = "";
+let currentModalLabel = "";
 let activeIndex = -1;
 let modalMode = "list"; // "list" | "chart"
 
@@ -422,6 +430,197 @@ function renderLeaderboard(grid, items) {
   });
 }
 
+function buildGroupBreakdown(items, grouping) {
+  const groups = new Map();
+
+  items.forEach(item => {
+    if (!item.symbol) return;
+    const { sector, industry, name } = getSectorInfo(item.symbol);
+    const groupName = (grouping === "industry" ? industry : sector) || "Unknown";
+
+    if (!groups.has(groupName)) {
+      groups.set(groupName, {
+        name: groupName,
+        items: new Map()
+      });
+    }
+
+    const group = groups.get(groupName);
+    if (!group.items.has(item.symbol)) {
+      group.items.set(item.symbol, {
+        symbol: item.symbol,
+        name,
+        percent: item.percent ?? null,
+        dollar_volume: item.dollar_volume ?? null,
+        adr_pct: item.adr_pct ?? null
+      });
+    }
+  });
+
+  return Array.from(groups.values()).map(group => ({
+    ...group,
+    total: group.items.size
+  })).sort((a, b) => {
+    if (b.total !== a.total) return b.total - a.total;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function buildGroupDetailTable(group) {
+  const wrap = document.createElement("div");
+  wrap.className = "detail-wrap";
+
+  const items = Array.from(group.items.values()).sort((a, b) =>
+    a.symbol.localeCompare(b.symbol)
+  );
+
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "detail-empty";
+    empty.textContent = "No stocks available.";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  const table = document.createElement("table");
+  table.className = "detail-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Ticker", "Company", "$ Volume", "ADR%", "Change%"].forEach(label => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  items.forEach(item => {
+    const row = document.createElement("tr");
+
+    const tickerTd = document.createElement("td");
+    tickerTd.textContent = item.symbol;
+    row.appendChild(tickerTd);
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = item.name || "—";
+    row.appendChild(nameTd);
+
+    const volTd = document.createElement("td");
+    volTd.className = "num";
+    volTd.textContent = formatDollarVolume(item.dollar_volume);
+    row.appendChild(volTd);
+
+    const adrTd = document.createElement("td");
+    adrTd.className = "num";
+    adrTd.textContent = formatAdr(item.adr_pct);
+    row.appendChild(adrTd);
+
+    const pctTd = document.createElement("td");
+    const isPos = Number.isFinite(item.percent) && item.percent > 0;
+    const isNeg = Number.isFinite(item.percent) && item.percent < 0;
+    pctTd.className = `num sl-chg-cell${isPos ? " positive" : isNeg ? " negative" : ""}`;
+    pctTd.textContent = formatPercent(item.percent);
+    row.appendChild(pctTd);
+
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function renderGroupModal(groups, groupLabel) {
+  const head = document.getElementById("groupModalHead");
+  const body = document.getElementById("groupModalBody");
+
+  head.innerHTML = "";
+  body.innerHTML = "";
+
+  const headRow = document.createElement("tr");
+  const groupTh = document.createElement("th");
+  groupTh.textContent = groupLabel;
+  const countTh = document.createElement("th");
+  countTh.textContent = "Stocks";
+  headRow.appendChild(groupTh);
+  headRow.appendChild(countTh);
+  head.appendChild(headRow);
+
+  if (!groups.length) {
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 2;
+    emptyCell.className = "table-empty";
+    emptyCell.textContent = "No breadth data available for this selection.";
+    emptyRow.appendChild(emptyCell);
+    body.appendChild(emptyRow);
+    return;
+  }
+
+  groups.forEach(group => {
+    const row = document.createElement("tr");
+    row.className = "group-row";
+
+    const nameCell = document.createElement("td");
+    nameCell.className = "group-name-cell";
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "toggle-btn";
+    toggleBtn.type = "button";
+    toggleBtn.setAttribute("aria-expanded", "false");
+    toggleBtn.innerHTML = `<svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "group-name";
+    nameSpan.textContent = group.name;
+
+    nameCell.appendChild(toggleBtn);
+    nameCell.appendChild(nameSpan);
+    row.appendChild(nameCell);
+
+    const countCell = document.createElement("td");
+    countCell.textContent = group.total.toLocaleString();
+    row.appendChild(countCell);
+
+    const detailRow = document.createElement("tr");
+    detailRow.className = "group-detail-row hidden";
+    const detailCell = document.createElement("td");
+    detailCell.colSpan = 2;
+    detailCell.appendChild(buildGroupDetailTable(group));
+    detailRow.appendChild(detailCell);
+
+    toggleBtn.addEventListener("click", () => {
+      const isHidden = detailRow.classList.toggle("hidden");
+      toggleBtn.classList.toggle("expanded", !isHidden);
+      toggleBtn.setAttribute("aria-expanded", String(!isHidden));
+    });
+
+    body.appendChild(row);
+    body.appendChild(detailRow);
+  });
+}
+
+function openGroupModal(grouping) {
+  const modal = document.getElementById("groupModal");
+  const title = document.getElementById("groupModalTitle");
+  const meta = document.getElementById("groupModalMeta");
+  const count = document.getElementById("groupModalCount");
+  const groupLabel = grouping === "industry" ? "Industry" : "Sector";
+
+  title.textContent = `${groupLabel} Breakdown`;
+  const metaParts = [currentModalDate, currentModalLabel].filter(Boolean);
+  meta.textContent = metaParts.join(" · ");
+  count.textContent = `${currentBaseItems.length.toLocaleString()} symbols`;
+
+  renderGroupModal(buildGroupBreakdown(currentBaseItems, grouping), groupLabel);
+  modal.classList.remove("hidden");
+}
+
+function closeGroupModal() {
+  document.getElementById("groupModal").classList.add("hidden");
+}
+
 function openModal(date, label, rawItems) {
   const modal = document.getElementById("modal");
   const title = document.getElementById("modalTitle");
@@ -435,6 +634,10 @@ function openModal(date, label, rawItems) {
   input.value = "";
 
   const baseItems = normalizeListItems(rawItems);
+  currentBaseItems = baseItems;
+  currentModalDate = date;
+  currentModalLabel = label;
+  closeGroupModal();
 
   const refresh = (itemsToRender) => {
     currentItems = sortLeaderboardItems(itemsToRender);
@@ -494,16 +697,24 @@ function closeModal() {
   document.getElementById("tvChartContainer").innerHTML = "";
   tvWidget = null;
   modalMode = "list";
+  closeGroupModal();
   if (window.BREADTH_MODAL_FUNDAMENTALS) {
     window.BREADTH_MODAL_FUNDAMENTALS.close();
   }
 }
 
 document.getElementById("closeModal").addEventListener("click", closeModal);
+document.getElementById("closeGroupModal").addEventListener("click", closeGroupModal);
 
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target.id === "modal") {
     closeModal();
+  }
+});
+
+document.getElementById("groupModal").addEventListener("click", (e) => {
+  if (e.target.id === "groupModal") {
+    closeGroupModal();
   }
 });
 
@@ -513,6 +724,9 @@ document.getElementById("chartViewBtn").addEventListener("click", () => {
     switchToChartMode(0);
   }
 });
+
+document.getElementById("openSectorBreakdown").addEventListener("click", () => openGroupModal("sector"));
+document.getElementById("openIndustryBreakdown").addEventListener("click", () => openGroupModal("industry"));
 
 document.getElementById("prevBtn").addEventListener("click", () => selectTicker(activeIndex - 1));
 document.getElementById("nextBtn").addEventListener("click", () => selectTicker(activeIndex + 1));
@@ -529,11 +743,16 @@ document.getElementById("trendModal").addEventListener("click", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const modalOpen = !document.getElementById("modal").classList.contains("hidden");
+  const groupOpen = !document.getElementById("groupModal").classList.contains("hidden");
   const trendOpen = !document.getElementById("trendModal").classList.contains("hidden");
 
-  if (!modalOpen && !trendOpen) return;
+  if (!modalOpen && !trendOpen && !groupOpen) return;
 
   if (e.key === "Escape") {
+    if (groupOpen) {
+      closeGroupModal();
+      return;
+    }
     if (modalOpen) {
       if (modalMode === "chart") { switchToListMode(); return; }
       closeModal();

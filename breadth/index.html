@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>US Market Breadth</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./grouping.css" />
 </head>
 <body>
   <header>
@@ -86,8 +87,8 @@
             <button id="chartViewBtn" class="view-tab" type="button">Chart</button>
           </div>
           <div class="view-tabs">
-            <a class="view-tab" href="./sector/">Sector</a>
-            <a class="view-tab" href="./industry/">Industry</a>
+            <button id="openSectorBreakdown" class="view-tab" type="button">Sector</button>
+            <button id="openIndustryBreakdown" class="view-tab" type="button">Industry</button>
           </div>
           <button id="closeModal" class="close-btn" type="button">×</button>
         </div>
@@ -202,6 +203,29 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="groupModal" class="modal hidden">
+    <div class="modal-card group-modal-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="groupModalTitle">Sector Breakdown</h3>
+          <p id="groupModalMeta"></p>
+        </div>
+        <button id="closeGroupModal" class="close-btn" type="button">×</button>
+      </div>
+      <div class="modal-toolbar">
+        <span id="groupModalCount" class="modal-count"></span>
+      </div>
+      <div class="modal-main-pane">
+        <div class="table-wrap group-table-wrap">
+          <table class="group-table">
+            <thead id="groupModalHead"></thead>
+            <tbody id="groupModalBody"></tbody>
+          </table>
         </div>
       </div>
     </div>

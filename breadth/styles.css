@@ -491,6 +491,19 @@ tbody td:first-child {
   font-size: 13px;
 }
 
+#groupModalMeta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.group-modal-card {
+  width: min(1000px, 100%);
+}
+
+.group-table-wrap {
+  max-height: 62vh;
+}
+
 .close-btn,
 .secondary-btn {
   border: 1px solid var(--border);
