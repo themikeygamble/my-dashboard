@@ -166,6 +166,14 @@ nav a.active {
   flex-wrap: wrap;
 }
 
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
 
 .year-label {
   font-size: 12px;
@@ -182,6 +190,9 @@ nav a.active {
 }
 
 .year-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
@@ -190,6 +201,7 @@ nav a.active {
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+  text-decoration: none;
 }
 
 .year-btn:hover {
@@ -576,11 +588,6 @@ tbody td:first-child {
   text-align: right;
 }
 
-.stock-list-table thead th.sl-actions {
-  text-align: center;
-  min-width: 72px;
-}
-
 .stock-list-table tbody td {
   padding: 8px 12px;
   border-bottom: 1px solid rgba(48, 54, 61, 0.5);
@@ -648,28 +655,6 @@ tbody td:first-child {
 .sl-chg-cell.positive { color: var(--green-3); }
 .sl-chg-cell.negative { color: var(--red-3); }
 
-.sl-actions-cell {
-  text-align: center;
-}
-
-.chart-row-btn {
-  border: 1px solid var(--border);
-  background: #131b28;
-  color: var(--muted);
-  border-radius: 8px;
-  padding: 5px 10px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.chart-row-btn:hover {
-  background: #1f3452;
-  color: var(--blue-3);
-  border-color: var(--blue-2);
-}
 
 .ticker-grid {
   display: flex;
