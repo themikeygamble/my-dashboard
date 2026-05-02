@@ -415,8 +415,54 @@ tbody td:first-child {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex-shrink: 0;
+}
+
+.modal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.view-tab {
+  border: 1px solid var(--border);
+  background: #0f1722;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.view-tab:hover {
+  color: var(--text);
+  background: #182435;
+  border-color: #35507a;
+}
+
+.view-tab.active {
+  color: var(--text);
+  background: #182435;
+  border-color: #35507a;
+}
+
+.modal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .modal-head h3 {
@@ -473,9 +519,157 @@ tbody td:first-child {
   color: var(--muted);
   font-size: 13px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.ticker-grid {
+/* Modal main pane containers (list vs chart view) */
+.modal-main-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-main-pane.hidden {
+  display: none;
+}
+
+/* Stock list table (default modal view) */
+.stock-list-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.stock-list-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  font-size: 13px;
+}
+
+.stock-list-table thead th {
+  position: sticky;
+  top: 0;
+  background: #0f1722;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  z-index: 2;
+  text-align: left;
+}
+
+.stock-list-table thead th.sl-vol,
+.stock-list-table thead th.sl-adr,
+.stock-list-table thead th.sl-chg,
+.stock-list-table thead th.sl-rank {
+  text-align: right;
+}
+
+.stock-list-table thead th.sl-actions {
+  text-align: center;
+  min-width: 72px;
+}
+
+.stock-list-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+  vertical-align: middle;
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+
+.stock-list-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.stock-list-table tbody tr:hover td {
+  background: #1a2432;
+}
+
+.sl-rank-cell {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-size: 12px;
+  min-width: 36px;
+}
+
+.sl-ticker-cell {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--blue-3);
+  min-width: 72px;
+}
+
+.sl-name-cell {
+  color: var(--text);
+  min-width: 140px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-muted-cell {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 100px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-num-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 80px;
+  font-size: 12px;
+}
+
+.sl-chg-cell {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 76px;
+}
+
+.sl-chg-cell.positive { color: var(--green-3); }
+.sl-chg-cell.negative { color: var(--red-3); }
+
+.sl-actions-cell {
+  text-align: center;
+}
+
+.chart-row-btn {
+  border: 1px solid var(--border);
+  background: #131b28;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.chart-row-btn:hover {
+  background: #1f3452;
+  color: var(--blue-3);
+  border-color: var(--blue-2);
+}
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -561,8 +755,8 @@ tbody td:first-child {
   color: var(--red-3);
 }
 
-/* Two-column modal body layout */
-.modal-body {
+/* Two-column modal body layout (chart view only) */
+#chartViewPane .modal-body {
   display: grid;
   grid-template-columns: 380px 1fr;
   gap: 16px;
@@ -1111,7 +1305,7 @@ tbody td:first-child {
     max-height: calc(100vh - 220px);
   }
 
-  .modal-body {
+  #chartViewPane .modal-body {
     grid-template-columns: 1fr;
   }
 
