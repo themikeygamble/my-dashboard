@@ -123,8 +123,9 @@ def main():
     symbols = build_full_universe()
 
     existing = load_existing_map()
-    to_fetch = [s for s in symbols if s not in existing]
-    print(f"Already cached: {len(existing)} | To fetch: {len(to_fetch)}")
+    # Fetch entries missing entirely or missing the 'name' field
+    to_fetch = [s for s in symbols if s not in existing or "name" not in existing[s]]
+    print(f"Already cached (with name): {len(symbols) - len(to_fetch)} | To fetch/update: {len(to_fetch)}")
 
     sector_map = dict(existing)
     total = len(to_fetch)
@@ -134,13 +135,20 @@ def main():
             info = yf.Ticker(symbol.replace(".", "-")).info
             sector = info.get("sector") or ""
             industry = info.get("industry") or ""
+            name = info.get("longName") or info.get("shortName") or ""
             sector_map[symbol] = {
+                "name": name,
                 "sector": sector,
                 "industry": industry
             }
         except Exception as e:
             print(f"  [{i+1}/{total}] {symbol} failed: {e}")
-            sector_map[symbol] = {"sector": "", "industry": ""}
+            existing_entry = existing.get(symbol, {})
+            sector_map[symbol] = {
+                "name": existing_entry.get("name", ""),
+                "sector": existing_entry.get("sector", ""),
+                "industry": existing_entry.get("industry", "")
+            }
 
         if (i + 1) % 50 == 0:
             print(f"  Progress: {i+1}/{total}")

@@ -245,10 +245,11 @@ function sortLeaderboardItems(items) {
 
 function getSectorInfo(symbol) {
   const entry = sectorMap[symbol];
-  if (!entry) return { sector: "", industry: "" };
+  if (!entry) return { sector: "", industry: "", name: "" };
   return {
     sector: entry.sector || "",
-    industry: entry.industry || ""
+    industry: entry.industry || "",
+    name: entry.name || ""
   };
 }
 
@@ -258,6 +259,7 @@ let tvScriptLoading = false;
 let tvScriptCallbacks = [];
 let currentItems = [];
 let activeIndex = -1;
+let modalMode = "list"; // "list" | "chart"
 
 function loadTVScript(cb) {
   if (tvScriptLoaded) { cb(); return; }
@@ -277,6 +279,78 @@ function loadTVScript(cb) {
     tvScriptCallbacks = [];
   };
   document.head.appendChild(s);
+}
+
+function formatDollarVolume(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
+  if (value >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderStockList(items) {
+  const tbody = document.getElementById("stockListBody");
+  tbody.innerHTML = "";
+
+  items.forEach((item, index) => {
+    const { sector, industry, name } = getSectorInfo(item.symbol);
+    const isPos = Number.isFinite(item.percent) && item.percent > 0;
+    const isNeg = Number.isFinite(item.percent) && item.percent < 0;
+    const chgClass = isPos ? " positive" : isNeg ? " negative" : "";
+    const adrText = (item.adr_pct !== null && item.adr_pct !== undefined && Number.isFinite(item.adr_pct))
+      ? item.adr_pct.toFixed(2) + "%" : "—";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="sl-rank-cell">${index + 1}</td>
+      <td class="sl-ticker-cell">${escapeHtml(item.symbol)}</td>
+      <td class="sl-name-cell" title="${escapeHtml(name || "—")}">${escapeHtml(name || "—")}</td>
+      <td class="sl-muted-cell" title="${escapeHtml(sector || "—")}">${escapeHtml(sector || "—")}</td>
+      <td class="sl-muted-cell" title="${escapeHtml(industry || "—")}">${escapeHtml(industry || "—")}</td>
+      <td class="sl-num-cell">${formatDollarVolume(item.dollar_volume ?? null)}</td>
+      <td class="sl-num-cell">${adrText}</td>
+      <td class="sl-chg-cell${chgClass}">${formatPercent(item.percent)}</td>
+      <td class="sl-actions-cell"><button class="chart-row-btn" type="button">Chart</button></td>
+    `;
+
+    tr.querySelector(".chart-row-btn").addEventListener("click", () => {
+      switchToChartMode(index);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+function switchToChartMode(index) {
+  modalMode = "chart";
+  document.getElementById("listPane").classList.add("hidden");
+  document.getElementById("chartViewPane").classList.remove("hidden");
+  document.getElementById("listViewBtn").classList.remove("active");
+  document.getElementById("chartViewBtn").classList.add("active");
+
+  renderLeaderboard(document.getElementById("tickerGrid"), currentItems);
+  selectTicker(index);
+}
+
+function switchToListMode() {
+  modalMode = "list";
+  document.getElementById("chartViewPane").classList.add("hidden");
+  document.getElementById("listPane").classList.remove("hidden");
+  document.getElementById("chartViewBtn").classList.remove("active");
+  document.getElementById("listViewBtn").classList.add("active");
+
+  document.getElementById("tvChartContainer").innerHTML = "";
+  tvWidget = null;
 }
 
 function selectTicker(index) {
@@ -358,7 +432,6 @@ function openModal(date, label, rawItems) {
   const title = document.getElementById("modalTitle");
   const meta = document.getElementById("modalMeta");
   const count = document.getElementById("modalCount");
-  const grid = document.getElementById("tickerGrid");
   const input = document.getElementById("tickerSearch");
   const copyBtn = document.getElementById("copyBtn");
 
@@ -371,9 +444,20 @@ function openModal(date, label, rawItems) {
   const refresh = (itemsToRender) => {
     currentItems = sortLeaderboardItems(itemsToRender);
     count.textContent = `${currentItems.length.toLocaleString()} symbols`;
-    renderLeaderboard(grid, currentItems);
-    selectTicker(0);
+    renderStockList(currentItems);
+    if (modalMode === "chart") {
+      renderLeaderboard(document.getElementById("tickerGrid"), currentItems);
+    }
   };
+
+  // Reset to list mode whenever a new modal is opened
+  modalMode = "list";
+  document.getElementById("listPane").classList.remove("hidden");
+  document.getElementById("chartViewPane").classList.add("hidden");
+  document.getElementById("listViewBtn").classList.add("active");
+  document.getElementById("chartViewBtn").classList.remove("active");
+  document.getElementById("tvChartContainer").innerHTML = "";
+  tvWidget = null;
 
   refresh(baseItems);
 
@@ -414,6 +498,7 @@ function closeModal() {
   document.getElementById("modal").classList.add("hidden");
   document.getElementById("tvChartContainer").innerHTML = "";
   tvWidget = null;
+  modalMode = "list";
   if (window.BREADTH_MODAL_FUNDAMENTALS) {
     window.BREADTH_MODAL_FUNDAMENTALS.close();
   }
@@ -424,6 +509,13 @@ document.getElementById("closeModal").addEventListener("click", closeModal);
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target.id === "modal") {
     closeModal();
+  }
+});
+
+document.getElementById("listViewBtn").addEventListener("click", switchToListMode);
+document.getElementById("chartViewBtn").addEventListener("click", () => {
+  if (modalMode !== "chart") {
+    switchToChartMode(0);
   }
 });
 
@@ -447,12 +539,17 @@ document.addEventListener("keydown", (e) => {
   if (!modalOpen && !trendOpen) return;
 
   if (e.key === "Escape") {
-    if (modalOpen) { closeModal(); return; }
+    if (modalOpen) {
+      if (modalMode === "chart") { switchToListMode(); return; }
+      closeModal();
+      return;
+    }
     if (trendOpen) { document.getElementById("trendModal").classList.add("hidden"); return; }
     return;
   }
 
-  if (!modalOpen) return;
+  // Arrow navigation only in chart mode
+  if (!modalOpen || modalMode !== "chart") return;
 
   if (e.key === "ArrowDown" || e.key === "ArrowRight") {
     e.preventDefault();

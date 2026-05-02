@@ -80,90 +80,122 @@
           <h3 id="modalTitle">Matching Stocks</h3>
           <p id="modalMeta"></p>
         </div>
-        <button id="closeModal" class="close-btn" type="button">×</button>
+        <div class="modal-head-actions">
+          <div class="view-tabs">
+            <button id="listViewBtn" class="view-tab active" type="button">List</button>
+            <button id="chartViewBtn" class="view-tab" type="button">Chart</button>
+          </div>
+          <button id="closeModal" class="close-btn" type="button">×</button>
+        </div>
       </div>
 
-      <div class="modal-body">
-        <div class="modal-left">
-          <div class="modal-tools">
-            <input id="tickerSearch" type="text" placeholder="Filter tickers..." />
-            <button id="copyBtn" class="secondary-btn" type="button">Copy list</button>
-          </div>
-          <div id="modalCount" class="modal-count"></div>
-          <div id="tickerGrid" class="ticker-grid"></div>
-          <div class="modal-nav">
-            <button id="prevBtn" class="secondary-btn" type="button">← Prev</button>
-            <button id="nextBtn" class="secondary-btn" type="button">Next →</button>
-          </div>
-        </div>
+      <div class="modal-toolbar">
+        <input id="tickerSearch" type="text" placeholder="Filter tickers..." />
+        <button id="copyBtn" class="secondary-btn" type="button">Copy list</button>
+        <span id="modalCount" class="modal-count"></span>
+      </div>
 
-        <div class="modal-right">
-          <div class="tv-chart-header">
-            <div class="tv-chart-title">
-              <span id="tvSymbol" class="tv-symbol"></span>
-              <span id="tvPercent" class="tv-percent"></span>
-              <span id="tvMeta" class="tv-meta"></span>
-            </div>
-            <div class="modal-pane-tabs">
-              <button id="chartPaneBtn" class="pane-tab active" type="button">Chart</button>
-              <button id="fundamentalsPaneBtn" class="pane-tab" type="button">Fundamental</button>
+      <!-- List pane: default view -->
+      <div id="listPane" class="modal-main-pane">
+        <div id="stockListWrap" class="stock-list-wrap">
+          <table id="stockListTable" class="stock-list-table">
+            <thead>
+              <tr>
+                <th class="sl-rank">#</th>
+                <th class="sl-ticker">Ticker</th>
+                <th class="sl-name">Company Name</th>
+                <th class="sl-sector">Sector</th>
+                <th class="sl-industry">Industry</th>
+                <th class="sl-vol">$ Volume</th>
+                <th class="sl-adr">ADR%</th>
+                <th class="sl-chg">Change%</th>
+                <th class="sl-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="stockListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Chart pane: accessed via Chart button -->
+      <div id="chartViewPane" class="modal-main-pane hidden">
+        <div class="modal-body">
+          <div class="modal-left">
+            <div id="tickerGrid" class="ticker-grid"></div>
+            <div class="modal-nav">
+              <button id="prevBtn" class="secondary-btn" type="button">← Prev</button>
+              <button id="nextBtn" class="secondary-btn" type="button">Next →</button>
             </div>
           </div>
-          <div id="chartPane" class="modal-pane">
-            <div id="tvChartContainer"></div>
-          </div>
-          <div id="fundamentalsPane" class="modal-pane hidden">
-            <div id="fundamentalsEmptyState" class="chart-empty compact-empty">Select a ticker to load fundamentals.</div>
-            <div id="fundamentalsContent" class="hidden">
-              <div class="fundamentals-summary">
-                <div class="summary-inline-card">
-                  <span class="summary-kicker">Company</span>
-                  <strong id="fundCompanyName">--</strong>
-                  <p id="fundCompanyMeta" class="summary-note">--</p>
-                </div>
-                <div class="summary-inline-grid">
-                  <div class="mini-stat">
-                    <span class="summary-kicker">FY</span>
-                    <strong id="fundLatestFiscalYear">--</strong>
-                  </div>
-                  <div class="mini-stat">
-                    <span class="summary-kicker">Filed</span>
-                    <strong id="fundLastFiled">--</strong>
-                  </div>
-                  <div class="mini-stat">
-                    <span class="summary-kicker">Hits</span>
-                    <strong id="fundBreadthHits">--</strong>
-                  </div>
-                </div>
+
+          <div class="modal-right">
+            <div class="tv-chart-header">
+              <div class="tv-chart-title">
+                <span id="tvSymbol" class="tv-symbol"></span>
+                <span id="tvPercent" class="tv-percent"></span>
+                <span id="tvMeta" class="tv-meta"></span>
               </div>
-              <div class="fundamentals-context-wrap">
-                <div id="fundBreadthContext" class="context-list compact-context"></div>
+              <div class="modal-pane-tabs">
+                <button id="chartPaneBtn" class="pane-tab active" type="button">Chart</button>
+                <button id="fundamentalsPaneBtn" class="pane-tab" type="button">Fundamental</button>
               </div>
-              <div class="fundamentals-chart-sections">
-                <section class="metric-group compact-group">
-                  <div class="section-head compact-head">
-                    <div>
-                      <h3>Income Statement</h3>
+            </div>
+            <div id="chartPane" class="modal-pane">
+              <div id="tvChartContainer"></div>
+            </div>
+            <div id="fundamentalsPane" class="modal-pane hidden">
+              <div id="fundamentalsEmptyState" class="chart-empty compact-empty">Select a ticker to load fundamentals.</div>
+              <div id="fundamentalsContent" class="hidden">
+                <div class="fundamentals-summary">
+                  <div class="summary-inline-card">
+                    <span class="summary-kicker">Company</span>
+                    <strong id="fundCompanyName">--</strong>
+                    <p id="fundCompanyMeta" class="summary-note">--</p>
+                  </div>
+                  <div class="summary-inline-grid">
+                    <div class="mini-stat">
+                      <span class="summary-kicker">FY</span>
+                      <strong id="fundLatestFiscalYear">--</strong>
+                    </div>
+                    <div class="mini-stat">
+                      <span class="summary-kicker">Filed</span>
+                      <strong id="fundLastFiled">--</strong>
+                    </div>
+                    <div class="mini-stat">
+                      <span class="summary-kicker">Hits</span>
+                      <strong id="fundBreadthHits">--</strong>
                     </div>
                   </div>
-                  <div id="incomeCharts" class="chart-grid compact-grid"></div>
-                </section>
-                <section class="metric-group compact-group">
-                  <div class="section-head compact-head">
-                    <div>
-                      <h3>Balance Sheet</h3>
+                </div>
+                <div class="fundamentals-context-wrap">
+                  <div id="fundBreadthContext" class="context-list compact-context"></div>
+                </div>
+                <div class="fundamentals-chart-sections">
+                  <section class="metric-group compact-group">
+                    <div class="section-head compact-head">
+                      <div>
+                        <h3>Income Statement</h3>
+                      </div>
                     </div>
-                  </div>
-                  <div id="balanceCharts" class="chart-grid compact-grid"></div>
-                </section>
-                <section class="metric-group compact-group">
-                  <div class="section-head compact-head">
-                    <div>
-                      <h3>Margins</h3>
+                    <div id="incomeCharts" class="chart-grid compact-grid"></div>
+                  </section>
+                  <section class="metric-group compact-group">
+                    <div class="section-head compact-head">
+                      <div>
+                        <h3>Balance Sheet</h3>
+                      </div>
                     </div>
-                  </div>
-                  <div id="marginCharts" class="chart-grid compact-grid"></div>
-                </section>
+                    <div id="balanceCharts" class="chart-grid compact-grid"></div>
+                  </section>
+                  <section class="metric-group compact-group">
+                    <div class="section-head compact-head">
+                      <div>
+                        <h3>Margins</h3>
+                      </div>
+                    </div>
+                    <div id="marginCharts" class="chart-grid compact-grid"></div>
+                  </section>
+                </div>
               </div>
             </div>
           </div>

@@ -171,7 +171,7 @@ def extract_batch_history(batch_symbols, start_date, end_date):
     )
 
     if data is None or data.empty:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume", "high", "low"])
 
     frames = []
 
@@ -190,10 +190,12 @@ def extract_batch_history(batch_symbols, start_date, end_date):
                 "Date": "date",
                 "Close": "close",
                 "Adj Close": "adj_close",
-                "Volume": "volume"
+                "Volume": "volume",
+                "High": "high",
+                "Low": "low"
             })
 
-            keep_cols = [c for c in ["date", "close", "adj_close", "volume"] if c in sub.columns]
+            keep_cols = [c for c in ["date", "close", "adj_close", "volume", "high", "low"] if c in sub.columns]
             sub = sub[keep_cols].copy()
 
             if "close" not in sub.columns:
@@ -202,6 +204,10 @@ def extract_batch_history(batch_symbols, start_date, end_date):
                 sub["adj_close"] = sub["close"]
             if "volume" not in sub.columns:
                 sub["volume"] = 0
+            if "high" not in sub.columns:
+                sub["high"] = float("nan")
+            if "low" not in sub.columns:
+                sub["low"] = float("nan")
 
             sub["symbol"] = yf_to_raw[yf_symbol]
             frames.append(sub)
@@ -210,10 +216,12 @@ def extract_batch_history(batch_symbols, start_date, end_date):
             "Date": "date",
             "Close": "close",
             "Adj Close": "adj_close",
-            "Volume": "volume"
+            "Volume": "volume",
+            "High": "high",
+            "Low": "low"
         })
 
-        keep_cols = [c for c in ["date", "close", "adj_close", "volume"] if c in sub.columns]
+        keep_cols = [c for c in ["date", "close", "adj_close", "volume", "high", "low"] if c in sub.columns]
         sub = sub[keep_cols].copy()
 
         if "close" in sub.columns:
@@ -221,17 +229,23 @@ def extract_batch_history(batch_symbols, start_date, end_date):
                 sub["adj_close"] = sub["close"]
             if "volume" not in sub.columns:
                 sub["volume"] = 0
+            if "high" not in sub.columns:
+                sub["high"] = float("nan")
+            if "low" not in sub.columns:
+                sub["low"] = float("nan")
             sub["symbol"] = batch_symbols[0]
             frames.append(sub)
 
     if not frames:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume", "high", "low"])
 
     out = pd.concat(frames, ignore_index=True)
     out["date"] = pd.to_datetime(out["date"]).dt.tz_localize(None)
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
     out["adj_close"] = pd.to_numeric(out["adj_close"], errors="coerce")
     out["volume"] = pd.to_numeric(out["volume"], errors="coerce").fillna(0)
+    out["high"] = pd.to_numeric(out["high"] if "high" in out.columns else float("nan"), errors="coerce")
+    out["low"] = pd.to_numeric(out["low"] if "low" in out.columns else float("nan"), errors="coerce")
     out = out.dropna(subset=["date", "symbol", "close", "adj_close"]).copy()
 
     return out
@@ -255,7 +269,7 @@ def download_all_histories(symbols, start_date, end_date):
         time.sleep(REQUEST_SLEEP)
 
     if not frames:
-        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume"])
+        return pd.DataFrame(columns=["date", "symbol", "close", "adj_close", "volume", "high", "low"])
 
     df = pd.concat(frames, ignore_index=True)
     df = df.sort_values(["symbol", "date"]).drop_duplicates(["symbol", "date"], keep="last")
@@ -349,7 +363,15 @@ def safe_ratio(up_count, down_count):
 
 
 def build_ranked_list(day_df, flag_col, ret_col):
-    subset = day_df.loc[day_df[flag_col] == True, ["symbol", ret_col]].copy()
+    cols = ["symbol", ret_col]
+    has_dv = "dollar_volume" in day_df.columns
+    has_adr = "adr_pct" in day_df.columns
+    if has_dv:
+        cols.append("dollar_volume")
+    if has_adr:
+        cols.append("adr_pct")
+
+    subset = day_df.loc[day_df[flag_col] == True, cols].copy()
 
     if subset.empty:
         return []
@@ -367,13 +389,20 @@ def build_ranked_list(day_df, flag_col, ret_col):
         ascending=[False, False, True]
     ).drop_duplicates(subset=["symbol"], keep="first")
 
-    return [
-        {
+    result = []
+    for row in subset.itertuples(index=False):
+        entry = {
             "symbol": str(row.symbol),
             "percent": round(float(row.percent), 2)
         }
-        for row in subset.itertuples(index=False)
-    ]
+        if has_dv:
+            dv = getattr(row, "dollar_volume", None)
+            entry["dollar_volume"] = None if pd.isna(dv) else round(float(dv), 0)
+        if has_adr:
+            adr = getattr(row, "adr_pct", None)
+            entry["adr_pct"] = None if pd.isna(adr) else round(float(adr), 2)
+        result.append(entry)
+    return result
 
 
 def build_new_rows(stock_df, ixic_df, dates_to_build):
@@ -392,6 +421,20 @@ def build_new_rows(stock_df, ixic_df, dates_to_build):
     df["ret_21d"] = (df["adj_close"] / df["adj_21"]) - 1
     df["ret_34d"] = (df["adj_close"] / df["adj_34"]) - 1
     df["ret_63d"] = (df["adj_close"] / df["adj_63"]) - 1
+
+    df["dollar_volume"] = df["close"] * df["volume"]
+
+    if "high" in df.columns and "low" in df.columns:
+        df["daily_range_pct"] = (
+            (pd.to_numeric(df["high"], errors="coerce") - pd.to_numeric(df["low"], errors="coerce"))
+            / df["close"] * 100
+        )
+        df["adr_pct"] = (
+            df.groupby("symbol")["daily_range_pct"]
+            .transform(lambda x: x.rolling(20, min_periods=5).mean())
+        )
+    else:
+        df["adr_pct"] = float("nan")
 
     df["up4_today"] = df["ret_1d"] >= 0.04
     df["down4_today"] = df["ret_1d"] <= -0.04
