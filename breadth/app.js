@@ -320,12 +320,7 @@ function renderStockList(items) {
       <td class="sl-num-cell">${formatDollarVolume(item.dollar_volume ?? null)}</td>
       <td class="sl-num-cell">${adrText}</td>
       <td class="sl-chg-cell${chgClass}">${formatPercent(item.percent)}</td>
-      <td class="sl-actions-cell"><button class="chart-row-btn" type="button">Chart</button></td>
     `;
-
-    tr.querySelector(".chart-row-btn").addEventListener("click", () => {
-      switchToChartMode(index);
-    });
 
     tbody.appendChild(tr);
   });

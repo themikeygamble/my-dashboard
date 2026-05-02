@@ -1,0 +1,153 @@
+ .date-select {
+   border: 1px solid var(--border);
+   background: var(--panel-2);
+   color: var(--text);
+   border-radius: 10px;
+   padding: 8px 12px;
+   cursor: pointer;
+   font: inherit;
+   font-weight: 700;
+   min-width: 160px;
+ }
+
+ .date-select:focus {
+   outline: none;
+   border-color: var(--blue-3);
+ }
+
+ .group-table thead th {
+   text-align: center;
+ }
+
+ .group-table thead th:first-child {
+   text-align: left;
+ }
+
+ .group-table tbody td {
+   text-align: center;
+ }
+
+ .group-table tbody td:first-child {
+   text-align: left;
+   min-width: 220px;
+ }
+
+ .group-table tbody td:nth-child(9) {
+   border-left: none;
+ }
+
+ .group-name-cell {
+   display: flex;
+   align-items: center;
+   gap: 10px;
+ }
+
+ .group-name {
+   font-weight: 700;
+   color: var(--text);
+ }
+
+ .group-count {
+   color: var(--muted);
+   font-size: 12px;
+   font-weight: 600;
+ }
+
+ .toggle-btn {
+   border: 1px solid var(--border);
+   background: var(--panel-2);
+   color: var(--text);
+   border-radius: 8px;
+   width: 28px;
+   height: 28px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   cursor: pointer;
+   padding: 0;
+ }
+
+ .toggle-btn svg {
+   width: 12px;
+   height: 12px;
+   transition: transform 0.12s ease;
+ }
+
+ .toggle-btn.expanded svg {
+   transform: rotate(90deg);
+ }
+
+ .group-detail-row td {
+   background: var(--panel-2);
+   padding: 0;
+ }
+
+ .group-detail-row.hidden {
+   display: none;
+ }
+
+ .detail-wrap {
+   padding: 12px 16px;
+ }
+
+ .detail-table {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: 12px;
+ }
+
+ .detail-table thead th {
+   position: static;
+   top: auto;
+   background: transparent;
+   color: var(--muted);
+   text-transform: uppercase;
+   font-size: 10px;
+   letter-spacing: 0.04em;
+   padding: 6px 8px;
+   border-bottom: 1px solid var(--border);
+   text-align: left;
+ }
+
+ .detail-table tbody td {
+   position: static;
+   left: auto;
+   background: transparent;
+   padding: 6px 8px;
+   border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+   text-align: left;
+   white-space: nowrap;
+ }
+
+ .detail-table tbody td.num {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+ }
+
+ .detail-table tbody td.cat {
+   color: var(--muted);
+   max-width: 280px;
+   overflow: hidden;
+   text-overflow: ellipsis;
+ }
+
+ .detail-table tbody tr:last-child td {
+   border-bottom: none;
+ }
+
+ .detail-table tbody tr:hover td {
+   background: transparent;
+ }
+
+.detail-empty {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.table-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 20px 12px;
+  font-weight: 600;
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Industry Breadth</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="../grouping.css" />
+</head>
+<body data-grouping="industry">
+  <header>
+    <a href="../../" class="site-name-link">themikeygamble</a>
+    <nav>
+      <a href="../../sectors/">Sector Rotation</a>
+      <a href="../" class="active">US Market Breadth</a>
+      <a href="../../swing/">Swing Scanner</a>
+    </nav>
+  </header>
+
+  <div class="page">
+    <section class="topbar">
+      <div>
+        <h1 id="pageTitle">Industry Breadth</h1>
+        <p id="subhead">Market breadth by industry</p>
+
+        <div class="year-toolbar">
+          <span class="year-label">Date</span>
+          <select id="dateSelect" class="date-select"></select>
+        </div>
+
+        <div class="view-toolbar">
+          <span class="year-label">Views</span>
+          <div class="year-tabs">
+            <a class="year-btn" href="../sector/">Sector</a>
+            <a class="year-btn active" href="./">Industry</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="chip">
+          <span>Selected Date</span>
+          <strong id="selectedDate">--</strong>
+        </div>
+        <div class="chip">
+          <span>Groups</span>
+          <strong id="groupCount">--</strong>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <section class="card">
+        <div class="table-wrap">
+          <table class="group-table">
+            <thead id="groupTableHead"></thead>
+            <tbody id="groupTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../grouping.js"></script>
+</body>
+</html>
