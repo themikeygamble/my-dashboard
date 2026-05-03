@@ -11,6 +11,7 @@ import yfinance as yf
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
+METRICS_OUTPUT_PATH = "data/breadth-metrics.json"
 
 INDICATOR_BUFFER_DAYS = 120
 PRICE_BATCH_SIZE = 120
@@ -24,6 +25,19 @@ SESSION.headers.update({
     "User-Agent": "Mozilla/5.0",
     "Accept": "text/plain,application/json,*/*"
 })
+
+LIST_SPECS = [
+    ("up4_today", "ret_1d"),
+    ("down4_today", "ret_1d"),
+    ("up25_quarter", "ret_63d"),
+    ("down25_quarter", "ret_63d"),
+    ("up25_month", "ret_21d"),
+    ("down25_month", "ret_21d"),
+    ("up50_month", "ret_21d"),
+    ("down50_month", "ret_21d"),
+    ("up13_34d", "ret_34d"),
+    ("down13_34d", "ret_34d"),
+]
 
 
 def load_existing_data():
@@ -41,6 +55,25 @@ def load_existing_data():
     existing_dates = {r["date"] for r in rows}
     latest_date = max(existing_dates)
     print(f"Existing data found. {len(rows)} rows. Latest date: {latest_date}")
+    return rows, latest_date
+
+
+def load_existing_metrics():
+    if not os.path.exists(METRICS_OUTPUT_PATH):
+        print("No existing metrics file found. Will do a full bootstrap.")
+        return [], None
+
+    with open(METRICS_OUTPUT_PATH, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    rows = payload.get("rows", [])
+    if not rows:
+        return [], None
+
+    existing_dates = {r["date"] for r in rows if "date" in r}
+    latest_date = max(existing_dates) if existing_dates else None
+    if latest_date:
+        print(f"Existing metrics data found. {len(rows)} rows. Latest date: {latest_date}")
     return rows, latest_date
 
 
@@ -405,10 +438,39 @@ def build_ranked_list(day_df, flag_col, ret_col):
     return result
 
 
-def build_new_rows(stock_df, ixic_df, dates_to_build):
+def build_metrics_list(day_df, flag_col, ret_col):
+    cols = ["symbol", ret_col, "dollar_volume", "adr_pct"]
+    subset = day_df.loc[day_df[flag_col] == True, cols].copy()
+
+    if subset.empty:
+        return []
+
+    subset["symbol"] = subset["symbol"].astype(str)
+    subset[ret_col] = pd.to_numeric(subset[ret_col], errors="coerce")
+    subset = subset.dropna(subset=["symbol", ret_col]).copy()
+
+    subset["abs_percent"] = subset[ret_col].abs()
+    subset = subset.sort_values(
+        by=["abs_percent", ret_col, "symbol"],
+        ascending=[False, False, True]
+    ).drop_duplicates(subset=["symbol"], keep="first")
+
+    result = []
+    for row in subset.itertuples(index=False):
+        dv = getattr(row, "dollar_volume", None)
+        adr = getattr(row, "adr_pct", None)
+        result.append({
+            "symbol": str(row.symbol),
+            "dollar_volume": None if pd.isna(dv) else round(float(dv), 0),
+            "adr_pct": None if pd.isna(adr) else round(float(adr), 2),
+        })
+    return result
+
+
+def enrich_stock_df(stock_df):
     df = stock_df.copy()
     if df.empty:
-        return []
+        return df
 
     df = df.sort_values(["symbol", "date"]).copy()
 
@@ -447,6 +509,13 @@ def build_new_rows(stock_df, ixic_df, dates_to_build):
     df["up13_34d"] = df["ret_34d"] >= 0.13
     df["down13_34d"] = df["ret_34d"] <= -0.13
 
+    return df
+
+
+def build_new_rows(df, ixic_df, dates_to_build):
+    if df.empty:
+        return []
+
     daily_counts = (
         df.groupby("date")[["up4_today", "down4_today"]]
         .sum()
@@ -480,16 +549,8 @@ def build_new_rows(stock_df, ixic_df, dates_to_build):
             continue
 
         lists = {
-            "up4_today": build_ranked_list(day, "up4_today", "ret_1d"),
-            "down4_today": build_ranked_list(day, "down4_today", "ret_1d"),
-            "up25_quarter": build_ranked_list(day, "up25_quarter", "ret_63d"),
-            "down25_quarter": build_ranked_list(day, "down25_quarter", "ret_63d"),
-            "up25_month": build_ranked_list(day, "up25_month", "ret_21d"),
-            "down25_month": build_ranked_list(day, "down25_month", "ret_21d"),
-            "up50_month": build_ranked_list(day, "up50_month", "ret_21d"),
-            "down50_month": build_ranked_list(day, "down50_month", "ret_21d"),
-            "up13_34d": build_ranked_list(day, "up13_34d", "ret_34d"),
-            "down13_34d": build_ranked_list(day, "down13_34d", "ret_34d"),
+            key: build_ranked_list(day, key, ret_col)
+            for key, ret_col in LIST_SPECS
         }
 
         ratio_5d = daily_counts.at[dt, "ratio_5d"] if dt in daily_counts.index else None
@@ -507,9 +568,48 @@ def build_new_rows(stock_df, ixic_df, dates_to_build):
     return rows
 
 
+def build_metrics_rows(df, dates_to_build):
+    if df.empty:
+        return []
+
+    rows = []
+    for dt in sorted(dates_to_build):
+        day = df[df["date"] == dt].copy()
+        if day.empty:
+            continue
+
+        lists = {
+            key: build_metrics_list(day, key, ret_col)
+            for key, ret_col in LIST_SPECS
+        }
+
+        rows.append({
+            "date": pd.Timestamp(dt).strftime("%Y-%m-%d"),
+            "lists": lists
+        })
+    return rows
+
+
+def merge_rows(existing_rows, new_rows):
+    all_rows = existing_rows + new_rows
+    seen = set()
+    merged = []
+    for row in all_rows:
+        date = row.get("date")
+        if not date or date in seen:
+            continue
+        seen.add(date)
+        merged.append(row)
+
+    merged.sort(key=lambda x: x["date"], reverse=True)
+    return merged
+
+
 def main():
     existing_rows, latest_date = load_existing_data()
+    metrics_rows, metrics_latest_date = load_existing_metrics()
     existing_dates = {r["date"] for r in existing_rows}
+    metrics_dates = {r["date"] for r in metrics_rows}
 
     today = datetime.now(timezone.utc).date()
     tomorrow = today + timedelta(days=1)
@@ -538,41 +638,53 @@ def main():
     print("Downloading Nasdaq Composite...")
     ixic_df = download_nasdaq_composite(start_str, end_str)
 
-    available_dates = set(stock_df["date"].dt.strftime("%Y-%m-%d").unique()) if not stock_df.empty else set()
+    enriched_df = enrich_stock_df(stock_df)
+
+    available_dates = set(enriched_df["date"].dt.strftime("%Y-%m-%d").unique()) if not enriched_df.empty else set()
     dates_to_build = {
         pd.Timestamp(d)
         for d in available_dates
         if d not in existing_dates
     }
+    metrics_dates_to_build = {
+        pd.Timestamp(d)
+        for d in available_dates
+        if d not in metrics_dates
+    }
 
-    if not dates_to_build:
+    if not dates_to_build and not metrics_dates_to_build:
         print("No new dates to add. Data is already up to date.")
         return
 
-    print(f"Building {len(dates_to_build)} new row(s)...")
-    new_rows = build_new_rows(stock_df, ixic_df, dates_to_build)
+    if dates_to_build:
+        print(f"Building {len(dates_to_build)} new row(s)...")
+        new_rows = build_new_rows(enriched_df, ixic_df, dates_to_build)
+        merged = merge_rows(existing_rows, new_rows)
+        payload = {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "rows": merged
+        }
 
-    all_rows = existing_rows + new_rows
-    seen = set()
-    merged = []
-    for row in all_rows:
-        if row["date"] not in seen:
-            seen.add(row["date"])
-            merged.append(row)
+        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+        with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
 
-    merged.sort(key=lambda x: x["date"], reverse=True)
+        print(f"Wrote breadth history. Total rows: {len(merged)} (+{len(new_rows)} new)")
 
-    payload = {
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "rows": merged
-    }
+    if metrics_dates_to_build:
+        print(f"Building {len(metrics_dates_to_build)} new metrics row(s)...")
+        new_metrics_rows = build_metrics_rows(enriched_df, metrics_dates_to_build)
+        merged_metrics = merge_rows(metrics_rows, new_metrics_rows)
+        metrics_payload = {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "rows": merged_metrics
+        }
 
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(METRICS_OUTPUT_PATH), exist_ok=True)
+        with open(METRICS_OUTPUT_PATH, "w", encoding="utf-8") as f:
+            json.dump(metrics_payload, f, ensure_ascii=False, separators=(",", ":"))
 
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-
-    print(f"Done. Total rows: {len(merged)} (+{len(new_rows)} new)")
+        print(f"Wrote breadth metrics. Total rows: {len(merged_metrics)} (+{len(new_metrics_rows)} new)")
 
 
 if __name__ == "__main__":
