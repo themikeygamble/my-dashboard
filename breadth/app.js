@@ -284,7 +284,7 @@ function normalizeListItems(items, date, listKey) {
     if (typeof rawPercent === "number" && Number.isFinite(rawPercent)) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
-      const cleaned = rawPercent.replace("%", "").replace("+", "").trim();
+      const cleaned = rawPercent.replace(/%/g, "").replace(/\+/g, "").trim();
       const parsed = Number(cleaned);
       percent = Number.isFinite(parsed) ? parsed : null;
     }
