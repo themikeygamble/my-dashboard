@@ -217,17 +217,21 @@ function normalizeNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function extractSymbol(item) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  return item.symbol || item.ticker || "";
+}
+
 function buildNameMap(entries) {
   const map = {};
   (entries || []).forEach(entry => {
     if (!entry) return;
-    if (typeof entry === "string") {
-      if (!map[entry]) map[entry] = "";
-      return;
-    }
-    const symbol = entry.symbol || entry.ticker;
+    const symbol = extractSymbol(entry);
     if (!symbol) return;
-    const name = entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "";
+    const name = typeof entry === "string"
+      ? ""
+      : (entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "");
     if (name) map[symbol] = name;
   });
   return map;
@@ -245,7 +249,7 @@ function buildMetricsLookup(rows) {
       const symbolLookup = new Map();
       items.forEach(item => {
         if (!item) return;
-        const symbol = typeof item === "string" ? item : (item.symbol || item.ticker || "");
+        const symbol = extractSymbol(item);
         if (!symbol) return;
         symbolLookup.set(symbol, {
           dollar_volume: normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null),
@@ -266,10 +270,12 @@ function getMetricsEntry(date, listKey, symbol) {
 
 function normalizeListItems(items, date, listKey) {
   return (items || []).map(item => {
+    const rawSymbol = extractSymbol(item);
+    const displaySymbol = rawSymbol || "N/A";
     if (typeof item === "string") {
-      const metrics = getMetricsEntry(date, listKey, item) || {};
+      const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
       return {
-        symbol: item,
+        symbol: displaySymbol,
         percent: null,
         dollar_volume: metrics.dollar_volume ?? null,
         adr_pct: metrics.adr_pct ?? null
@@ -285,18 +291,17 @@ function normalizeListItems(items, date, listKey) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
       const cleaned = rawPercent.trim();
-      const match = cleaned.match(/-?\d+(\.\d+)?/);
+      const match = cleaned.match(/[+-]?\d+(\.\d+)?/);
       const parsed = match ? Number(match[0]) : Number.NaN;
       percent = Number.isFinite(parsed) ? parsed : null;
     }
 
-    const symbol = item.symbol || item.ticker || "N/A";
-    const metrics = getMetricsEntry(date, listKey, symbol) || {};
+    const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
     const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
     const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);
 
     return {
-      symbol,
+      symbol: displaySymbol,
       percent,
       dollar_volume: dollarVolume ?? metrics.dollar_volume ?? null,
       adr_pct: adrPct ?? metrics.adr_pct ?? null

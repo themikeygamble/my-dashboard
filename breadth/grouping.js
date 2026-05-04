@@ -51,17 +51,21 @@ function normalizeNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function extractSymbol(item) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  return item.symbol || item.ticker || "";
+}
+
 function buildNameMap(entries) {
   const map = {};
   (entries || []).forEach(entry => {
     if (!entry) return;
-    if (typeof entry === "string") {
-      if (!map[entry]) map[entry] = "";
-      return;
-    }
-    const symbol = entry.symbol || entry.ticker;
+    const symbol = extractSymbol(entry);
     if (!symbol) return;
-    const name = entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "";
+    const name = typeof entry === "string"
+      ? ""
+      : (entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "");
     if (name) map[symbol] = name;
   });
   return map;
@@ -79,7 +83,7 @@ function buildMetricsLookup(rows) {
       const symbolLookup = new Map();
       items.forEach(item => {
         if (!item) return;
-        const symbol = typeof item === "string" ? item : (item.symbol || item.ticker || "");
+        const symbol = extractSymbol(item);
         if (!symbol) return;
         symbolLookup.set(symbol, {
           dollar_volume: normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null),
@@ -99,20 +103,20 @@ function getMetricsEntry(date, listKey, symbol) {
 }
 
 function normalizeItem(item, date, listKey) {
+  const rawSymbol = extractSymbol(item);
   if (typeof item === "string") {
-    const metrics = getMetricsEntry(date, listKey, item) || {};
+    const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
     return {
-      symbol: item,
+      symbol: rawSymbol,
       dollar_volume: metrics.dollar_volume ?? null,
       adr_pct: metrics.adr_pct ?? null
     };
   }
-  const symbol = item.symbol || item.ticker || "";
-  const metrics = getMetricsEntry(date, listKey, symbol) || {};
+  const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
   const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
   const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);
   return {
-    symbol,
+    symbol: rawSymbol,
     dollar_volume: dollarVolume ?? metrics.dollar_volume ?? null,
     adr_pct: adrPct ?? metrics.adr_pct ?? null
   };
