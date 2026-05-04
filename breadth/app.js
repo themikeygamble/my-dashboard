@@ -24,21 +24,30 @@ const PAIRS = [
 
 let breadthData = [];
 let sectorMap = {};
+let nameMap = {};
+let metricsLookup = new Map();
 let selectedYear = "2026";
 
 async function loadData() {
-  const [breadthRes, sectorRes] = await Promise.allSettled([
+  const [breadthRes, sectorRes, metricsRes] = await Promise.allSettled([
     fetch("../data/breadth-history.json", { cache: "no-store" }),
-    fetch("../data/sector-map.json", { cache: "no-store" })
+    fetch("../data/sector-map.json", { cache: "no-store" }),
+    fetch("../data/breadth-metrics.json", { cache: "no-store" })
   ]);
 
   if (breadthRes.status === "fulfilled" && breadthRes.value.ok) {
     const json = await breadthRes.value.json();
     breadthData = json.rows || [];
+    nameMap = buildNameMap(json.universe?.symbols || []);
   }
 
   if (sectorRes.status === "fulfilled" && sectorRes.value.ok) {
     sectorMap = await sectorRes.value.json();
+  }
+
+  if (metricsRes.status === "fulfilled" && metricsRes.value.ok) {
+    const metricsJson = await metricsRes.value.json();
+    metricsLookup = buildMetricsLookup(metricsJson.rows || []);
   }
 
   if (!breadthData.length) {
@@ -134,7 +143,7 @@ function renderTable(rows) {
         const btn = document.createElement("button");
         btn.className = `cell-btn ${pairClasses[col.key] || "plain-btn"}`;
         btn.textContent = list.length.toLocaleString();
-        btn.addEventListener("click", () => openModal(row.date, col.label, list));
+        btn.addEventListener("click", () => openModal(row.date, col.label, col.key, list));
         td.appendChild(btn);
       }
 
@@ -202,10 +211,75 @@ function getRatioClass(value) {
   return "bear-dominant";
 }
 
-function normalizeListItems(items) {
+function normalizeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractSymbol(item) {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  return item.symbol || item.ticker || "";
+}
+
+function buildNameMap(entries) {
+  const map = {};
+  (entries || []).forEach(entry => {
+    if (!entry) return;
+    const symbol = extractSymbol(entry);
+    if (!symbol) return;
+    const name = typeof entry === "string"
+      ? ""
+      : (entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "");
+    if (name) map[symbol] = name;
+  });
+  return map;
+}
+
+function buildMetricsLookup(rows) {
+  const lookup = new Map();
+  (rows || []).forEach(row => {
+    const date = row?.date;
+    const lists = row?.lists;
+    if (!date || !lists) return;
+    const listLookup = new Map();
+    Object.entries(lists).forEach(([key, items]) => {
+      if (!Array.isArray(items)) return;
+      const symbolLookup = new Map();
+      items.forEach(item => {
+        if (!item) return;
+        const symbol = extractSymbol(item);
+        if (!symbol) return;
+        symbolLookup.set(symbol, {
+          dollar_volume: normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null),
+          adr_pct: normalizeNumber(item.adr_pct ?? item.adrPct ?? null)
+        });
+      });
+      if (symbolLookup.size) listLookup.set(key, symbolLookup);
+    });
+    if (listLookup.size) lookup.set(date, listLookup);
+  });
+  return lookup;
+}
+
+function getMetricsEntry(date, listKey, symbol) {
+  if (!date || !listKey || !symbol) return null;
+  return metricsLookup.get(date)?.get(listKey)?.get(symbol) ?? null;
+}
+
+function normalizeListItems(items, date, listKey) {
   return (items || []).map(item => {
+    const rawSymbol = extractSymbol(item);
+    const displaySymbol = rawSymbol || "N/A";
     if (typeof item === "string") {
-      return { symbol: item, percent: null };
+      const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
+      return {
+        symbol: displaySymbol,
+        percent: null,
+        dollar_volume: metrics.dollar_volume ?? null,
+        adr_pct: metrics.adr_pct ?? null
+      };
     }
 
     const rawPercent =
@@ -216,14 +290,21 @@ function normalizeListItems(items) {
     if (typeof rawPercent === "number" && Number.isFinite(rawPercent)) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
-      const cleaned = rawPercent.replace("%", "").replace("+", "").trim();
-      const parsed = Number(cleaned);
+      const cleaned = rawPercent.trim();
+      const match = cleaned.match(/^[+-]?\d+(\.\d+)?%?$/);
+      const parsed = match ? Number(match[0].replace(/%$/, "")) : Number.NaN;
       percent = Number.isFinite(parsed) ? parsed : null;
     }
 
+    const metrics = rawSymbol ? (getMetricsEntry(date, listKey, rawSymbol) || {}) : {};
+    const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
+    const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);
+
     return {
-      symbol: item.symbol || item.ticker || item.name || "N/A",
-      percent
+      symbol: displaySymbol,
+      percent,
+      dollar_volume: dollarVolume ?? metrics.dollar_volume ?? null,
+      adr_pct: adrPct ?? metrics.adr_pct ?? null
     };
   });
 }
@@ -250,11 +331,12 @@ function sortLeaderboardItems(items) {
 
 function getSectorInfo(symbol) {
   const entry = sectorMap[symbol];
-  if (!entry) return { sector: "", industry: "", name: "" };
+  const fallbackName = nameMap[symbol] || "";
+  if (!entry) return { sector: "", industry: "", name: fallbackName };
   return {
     sector: entry.sector || "",
     industry: entry.industry || "",
-    name: entry.name || ""
+    name: entry.name || fallbackName
   };
 }
 
@@ -622,7 +704,7 @@ function closeGroupModal() {
   document.getElementById("groupModal").classList.add("hidden");
 }
 
-function openModal(date, label, rawItems) {
+function openModal(date, label, listKey, rawItems) {
   const modal = document.getElementById("modal");
   const title = document.getElementById("modalTitle");
   const meta = document.getElementById("modalMeta");
@@ -634,7 +716,7 @@ function openModal(date, label, rawItems) {
   meta.textContent = date;
   input.value = "";
 
-  const baseItems = normalizeListItems(rawItems);
+  const baseItems = normalizeListItems(rawItems, date, listKey);
   currentBaseItems = baseItems;
   currentModalDate = date;
   currentModalLabel = label;
