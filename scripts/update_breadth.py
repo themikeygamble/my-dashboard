@@ -11,7 +11,6 @@ import yfinance as yf
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
-SECTOR_MAP_PATH = "data/sector-map.json"
 
 INDICATOR_BUFFER_DAYS = 120
 PRICE_BATCH_SIZE = 120
@@ -56,15 +55,15 @@ def find_name_column(columns):
 def clean_company_name(series):
     if series is None:
         raise ValueError("Expected a company name series, but received None.")
-    cleaned = series.astype("string").str.strip()
-    cleaned = cleaned.fillna("")
-    return cleaned.astype(str)
+    cleaned = series.fillna("").astype(str).str.strip()
+    return cleaned
 
 
 def load_sector_map():
-    if not os.path.exists(SECTOR_MAP_PATH):
+    sector_map_path = "data/sector-map.json"
+    if not os.path.exists(sector_map_path):
         return {}
-    with open(SECTOR_MAP_PATH, "r", encoding="utf-8") as f:
+    with open(sector_map_path, "r", encoding="utf-8") as f:
         payload = json.load(f)
     return payload if isinstance(payload, dict) else {}
 
@@ -174,10 +173,10 @@ def build_full_universe():
 
     combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
     combined["Name"] = clean_company_name(combined["Name"])
-    combined["Name"] = combined["Name"].replace("", pd.NA)
-    combined = combined.sort_values(["Symbol", "Name"], na_position="last").copy()
+    combined["has_name"] = combined["Name"].astype(str).str.strip().ne("")
+    combined = combined.sort_values(["Symbol", "has_name"], ascending=[True, False]).copy()
     combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
-    combined["Name"] = combined["Name"].fillna("")
+    combined = combined.drop(columns=["has_name"])
     combined = filter_derivatives(combined)
 
     symbols = combined["Symbol"].dropna().unique().tolist()
@@ -450,12 +449,8 @@ def build_ranked_list(day_df, flag_col, ret_col):
 
 def resolve_company_name(symbol, name_map, sector_map):
     entry = sector_map.get(symbol, {})
-    name = ""
-    if isinstance(entry, dict):
-        name = entry.get("name") or ""
-    if not name:
-        name = name_map.get(symbol, "")
-    return name
+    name = (entry.get("name") or "") if isinstance(entry, dict) else ""
+    return name or name_map.get(symbol, "")
 
 
 def build_universe_entries(symbols, name_map, sector_map):
