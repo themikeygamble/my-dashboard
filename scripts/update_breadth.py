@@ -55,7 +55,7 @@ def find_name_column(columns):
 
 def clean_company_name(series):
     if series is None:
-        return ""
+        return pd.Series(dtype=str)
     cleaned = series.astype("string").str.strip()
     cleaned = cleaned.fillna("")
     return cleaned.astype(str)
@@ -174,12 +174,10 @@ def build_full_universe():
 
     combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
     combined["Name"] = clean_company_name(combined["Name"])
-    combined = combined.sort_values(
-        ["Symbol", "Name"],
-        key=lambda col: col.astype(str).str.strip().ne("") if col.name == "Name" else col,
-        ascending=[True, False]
-    ).copy()
+    combined["name_sort"] = combined["Name"].replace("", "\uffff")
+    combined = combined.sort_values(["Symbol", "name_sort"], ascending=[True, True]).copy()
     combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
+    combined = combined.drop(columns=["name_sort"])
     combined = filter_derivatives(combined)
 
     symbols = combined["Symbol"].dropna().unique().tolist()
@@ -451,7 +449,7 @@ def build_ranked_list(day_df, flag_col, ret_col):
 
 
 def resolve_company_name(symbol, name_map, sector_map):
-    entry = sector_map.get(symbol, {}) if isinstance(sector_map, dict) else {}
+    entry = sector_map.get(symbol, {})
     name = ""
     if isinstance(entry, dict):
         name = entry.get("name") or ""
