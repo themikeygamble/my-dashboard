@@ -56,9 +56,9 @@ def find_name_column(columns):
 def clean_company_name(series):
     if series is None:
         return ""
-    cleaned = series.fillna("").astype(str).str.strip()
-    cleaned = cleaned.mask(cleaned.str.lower() == "nan", "")
-    return cleaned
+    cleaned = series.astype("string").str.strip()
+    cleaned = cleaned.fillna("")
+    return cleaned.astype(str)
 
 
 def load_sector_map():
@@ -173,13 +173,13 @@ def build_full_universe():
     other_df = download_other_universe()
 
     combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
-    if "Name" not in combined.columns:
-        combined["Name"] = ""
     combined["Name"] = clean_company_name(combined["Name"])
-    combined["has_name"] = combined["Name"].astype(str).str.strip().ne("")
-    combined = combined.sort_values(["Symbol", "has_name"], ascending=[True, False]).copy()
+    combined = combined.sort_values(
+        ["Symbol", "Name"],
+        key=lambda col: col.astype(str).str.strip().ne("") if col.name == "Name" else col,
+        ascending=[True, False]
+    ).copy()
     combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
-    combined = combined.drop(columns=["has_name"])
     combined = filter_derivatives(combined)
 
     symbols = combined["Symbol"].dropna().unique().tolist()
