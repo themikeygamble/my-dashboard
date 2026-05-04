@@ -57,7 +57,7 @@ def clean_company_name(series):
     if series is None:
         return ""
     cleaned = series.fillna("").astype(str).str.strip()
-    cleaned = cleaned.where(cleaned.str.lower() != "nan", "")
+    cleaned = cleaned.mask(cleaned.str.lower() == "nan", "")
     return cleaned
 
 
@@ -179,6 +179,7 @@ def build_full_universe():
     combined["has_name"] = combined["Name"].astype(str).str.strip().ne("")
     combined = combined.sort_values(["Symbol", "has_name"], ascending=[True, False]).copy()
     combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
+    combined = combined.drop(columns=["has_name"])
     combined = filter_derivatives(combined)
 
     symbols = combined["Symbol"].dropna().unique().tolist()
@@ -456,7 +457,7 @@ def resolve_company_name(symbol, name_map, sector_map):
         name = entry.get("name") or ""
     if not name:
         name = name_map.get(symbol, "")
-    return name or symbol
+    return name
 
 
 def build_universe_entries(symbols, name_map, sector_map):
