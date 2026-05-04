@@ -284,12 +284,13 @@ function normalizeListItems(items, date, listKey) {
     if (typeof rawPercent === "number" && Number.isFinite(rawPercent)) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
-      const cleaned = rawPercent.trim().replace(/^\+/, "").replace(/%$/, "");
-      const parsed = Number(cleaned);
+      const cleaned = rawPercent.trim();
+      const match = cleaned.match(/-?\d+(\.\d+)?/);
+      const parsed = match ? Number(match[0]) : Number.NaN;
       percent = Number.isFinite(parsed) ? parsed : null;
     }
 
-    const symbol = item.symbol || item.ticker || item.name || "N/A";
+    const symbol = item.symbol || item.ticker || "N/A";
     const metrics = getMetricsEntry(date, listKey, symbol) || {};
     const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
     const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);

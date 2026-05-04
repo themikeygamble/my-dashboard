@@ -107,7 +107,7 @@ function normalizeItem(item, date, listKey) {
       adr_pct: metrics.adr_pct ?? null
     };
   }
-  const symbol = item.symbol || item.ticker || item.name || "";
+  const symbol = item.symbol || item.ticker || "";
   const metrics = getMetricsEntry(date, listKey, symbol) || {};
   const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
   const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);
