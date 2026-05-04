@@ -291,8 +291,8 @@ function normalizeListItems(items, date, listKey) {
       percent = rawPercent;
     } else if (typeof rawPercent === "string") {
       const cleaned = rawPercent.trim();
-      const match = cleaned.match(/[+-]?\d+(\.\d+)?/);
-      const parsed = match ? Number(match[0]) : Number.NaN;
+      const match = cleaned.match(/^[+-]?\d+(\.\d+)?%?$/);
+      const parsed = match ? Number(match[0].replace(/%$/, "")) : Number.NaN;
       percent = Number.isFinite(parsed) ? parsed : null;
     }
 
