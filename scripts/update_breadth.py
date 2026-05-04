@@ -77,6 +77,30 @@ def load_existing_metrics():
     return rows, latest_date
 
 
+def find_name_column(columns):
+    normalized = {str(col).strip().lower(): col for col in columns}
+    for key in ("security name", "company name", "issuer name"):
+        if key in normalized:
+            return normalized[key]
+    return None
+
+
+def clean_company_name(series):
+    if series is None:
+        raise ValueError("Expected a company name series, but received None.")
+    cleaned = series.fillna("").astype(str).str.strip()
+    return cleaned
+
+
+def load_sector_map():
+    sector_map_path = "data/sector-map.json"
+    if not os.path.exists(sector_map_path):
+        return {}
+    with open(sector_map_path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+    return payload if isinstance(payload, dict) else {}
+
+
 def download_nasdaq_universe():
     r = SESSION.get(NASDAQ_LISTED_URL, timeout=60)
     r.raise_for_status()
@@ -86,10 +110,17 @@ def download_nasdaq_universe():
     rows = [line.split("|") for line in lines[1:] if line and not line.startswith("File Creation Time")]
     df = pd.DataFrame(rows, columns=header)
 
+    df.columns = [c.strip() for c in df.columns]
     df["Symbol"] = df["Symbol"].astype(str).str.strip().str.upper()
     df["Test Issue"] = df["Test Issue"].astype(str).str.strip().str.upper()
     df["ETF"] = df["ETF"].astype(str).str.strip().str.upper()
     df["NextShares"] = df["NextShares"].astype(str).str.strip().str.upper()
+
+    name_col = find_name_column(df.columns)
+    if name_col:
+        df["Name"] = clean_company_name(df[name_col])
+    else:
+        df["Name"] = ""
 
     df = df[df["Test Issue"] == "N"].copy()
     df = df[df["ETF"] == "N"].copy()
@@ -99,7 +130,7 @@ def download_nasdaq_universe():
     for ch in bad_chars:
         df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
 
-    return df[["Symbol"]].copy()
+    return df[["Symbol", "Name"]].copy()
 
 
 def download_other_universe():
@@ -122,6 +153,12 @@ def download_other_universe():
     df["ETF"] = df["ETF"].astype(str).str.strip().str.upper()
     df["Test Issue"] = df["Test Issue"].astype(str).str.strip().str.upper()
 
+    name_col = find_name_column(df.columns)
+    if name_col:
+        df["Name"] = clean_company_name(df[name_col])
+    else:
+        df["Name"] = ""
+
     # Only keep NYSE (N), NYSE ARCA (P), NYSE MKT/AMEX (A), BATS/CBOE (Z)
     df["Exchange"] = df["Exchange"].astype(str).str.strip().str.upper()
     df = df[df["Exchange"].isin(["N", "P", "A", "Z"])].copy()
@@ -133,7 +170,7 @@ def download_other_universe():
     for ch in bad_chars:
         df = df[~df["Symbol"].str.contains("\\" + ch, regex=True, na=False)].copy()
 
-    return df[["Symbol"]].copy()
+    return df[["Symbol", "Name"]].copy()
 
 
 def filter_derivatives(df):
@@ -168,13 +205,18 @@ def build_full_universe():
     other_df = download_other_universe()
 
     combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
-    combined = combined.drop_duplicates(subset=["Symbol"]).copy()
+    combined["Name"] = clean_company_name(combined["Name"])
+    combined["has_name"] = combined["Name"].astype(str).str.strip().ne("")
+    combined = combined.sort_values(["Symbol", "has_name"], ascending=[True, False]).copy()
+    combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
+    combined = combined.drop(columns=["has_name"])
     combined = filter_derivatives(combined)
 
     symbols = combined["Symbol"].dropna().unique().tolist()
     symbols.sort()
     print(f"Total universe after filters: {len(symbols)} symbols")
-    return symbols
+    name_map = dict(zip(combined["Symbol"], combined["Name"]))
+    return symbols, name_map
 
 
 def to_yf_symbol(symbol):
@@ -438,6 +480,19 @@ def build_ranked_list(day_df, flag_col, ret_col):
     return result
 
 
+def resolve_company_name(symbol, name_map, sector_map):
+    entry = sector_map.get(symbol, {})
+    name = (entry.get("name") or "") if isinstance(entry, dict) else ""
+    return name or name_map.get(symbol, "")
+
+
+def build_universe_entries(symbols, name_map, sector_map):
+    return [
+        {"symbol": symbol, "name": resolve_company_name(symbol, name_map, sector_map)}
+        for symbol in symbols
+    ]
+
+
 def build_metrics_list(day_df, flag_col, ret_col):
     cols = ["symbol", ret_col, "dollar_volume", "adr_pct"]
     subset = day_df.loc[day_df[flag_col] == True, cols].copy()
@@ -627,13 +682,18 @@ def main():
     start_str = fetch_start.strftime("%Y-%m-%d")
     end_str = tomorrow.strftime("%Y-%m-%d")
 
-    symbols = build_full_universe()
+    sector_map = load_sector_map()
+    symbols, name_map = build_full_universe()
 
     print("Downloading stock histories...")
     stock_df = download_all_histories(symbols, start_str, end_str)
 
     print("Applying liquidity filter...")
     stock_df = apply_liquidity_filter(stock_df)
+    qualified_symbols = []
+    if not stock_df.empty:
+        qualified_symbols = sorted(stock_df["symbol"].dropna().unique().tolist())
+    universe_entries = build_universe_entries(qualified_symbols, name_map, sector_map)
 
     print("Downloading Nasdaq Composite...")
     ixic_df = download_nasdaq_composite(start_str, end_str)
@@ -662,6 +722,10 @@ def main():
         merged = merge_rows(existing_rows, new_rows)
         payload = {
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "universe": {
+                "count": len(universe_entries),
+                "symbols": universe_entries
+            },
             "rows": merged
         }
 
