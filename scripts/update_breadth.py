@@ -12,6 +12,7 @@ NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.tx
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 SECTOR_MAP_PATH = "data/sector-map.json"
+EMPTY_NAME_SORT_KEY = "\uffff"
 
 INDICATOR_BUFFER_DAYS = 120
 PRICE_BATCH_SIZE = 120
@@ -174,7 +175,7 @@ def build_full_universe():
 
     combined = pd.concat([nasdaq_df, other_df], ignore_index=True)
     combined["Name"] = clean_company_name(combined["Name"])
-    combined["name_sort"] = combined["Name"].replace("", "\uffff")
+    combined["name_sort"] = combined["Name"].replace("", EMPTY_NAME_SORT_KEY)
     combined = combined.sort_values(["Symbol", "name_sort"], ascending=[True, True]).copy()
     combined = combined.drop_duplicates(subset=["Symbol"], keep="first").copy()
     combined = combined.drop(columns=["name_sort"])
