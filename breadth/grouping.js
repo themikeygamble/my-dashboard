@@ -24,6 +24,8 @@ const subhead = document.getElementById("subhead");
 
 let breadthRows = [];
 let sectorMap = {};
+let nameMap = {};
+let metricsLookup = new Map();
 let selectedDate = "";
 
 if (pageTitle) pageTitle.textContent = `${GROUP_LABEL} Breadth`;
@@ -43,14 +45,76 @@ function formatAdr(value) {
   return `${value.toFixed(2)}%`;
 }
 
-function normalizeItem(item) {
+function normalizeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildNameMap(entries) {
+  const map = {};
+  (entries || []).forEach(entry => {
+    if (!entry) return;
+    if (typeof entry === "string") {
+      if (!map[entry]) map[entry] = "";
+      return;
+    }
+    const symbol = entry.symbol || entry.ticker;
+    if (!symbol) return;
+    const name = entry.name || entry.company_name || entry.companyName || entry.longName || entry.shortName || "";
+    if (name) map[symbol] = name;
+  });
+  return map;
+}
+
+function buildMetricsLookup(rows) {
+  const lookup = new Map();
+  (rows || []).forEach(row => {
+    const date = row?.date;
+    const lists = row?.lists;
+    if (!date || !lists) return;
+    const listLookup = new Map();
+    Object.entries(lists).forEach(([key, items]) => {
+      if (!Array.isArray(items)) return;
+      const symbolLookup = new Map();
+      items.forEach(item => {
+        if (!item) return;
+        const symbol = typeof item === "string" ? item : (item.symbol || item.ticker || "");
+        if (!symbol) return;
+        symbolLookup.set(symbol, {
+          dollar_volume: normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null),
+          adr_pct: normalizeNumber(item.adr_pct ?? item.adrPct ?? null)
+        });
+      });
+      if (symbolLookup.size) listLookup.set(key, symbolLookup);
+    });
+    if (listLookup.size) lookup.set(date, listLookup);
+  });
+  return lookup;
+}
+
+function getMetricsEntry(date, listKey, symbol) {
+  if (!date || !listKey || !symbol) return null;
+  return metricsLookup.get(date)?.get(listKey)?.get(symbol) ?? null;
+}
+
+function normalizeItem(item, date, listKey) {
   if (typeof item === "string") {
-    return { symbol: item, dollar_volume: null, adr_pct: null };
+    const metrics = getMetricsEntry(date, listKey, item) || {};
+    return {
+      symbol: item,
+      dollar_volume: metrics.dollar_volume ?? null,
+      adr_pct: metrics.adr_pct ?? null
+    };
   }
+  const symbol = item.symbol || item.ticker || item.name || "";
+  const metrics = getMetricsEntry(date, listKey, symbol) || {};
+  const dollarVolume = normalizeNumber(item.dollar_volume ?? item.dollarVolume ?? null);
+  const adrPct = normalizeNumber(item.adr_pct ?? item.adrPct ?? null);
   return {
-    symbol: item.symbol || item.ticker || item.name || "",
-    dollar_volume: item.dollar_volume ?? null,
-    adr_pct: item.adr_pct ?? null
+    symbol,
+    dollar_volume: dollarVolume ?? metrics.dollar_volume ?? null,
+    adr_pct: adrPct ?? metrics.adr_pct ?? null
   };
 }
 
@@ -59,7 +123,7 @@ function getGroupInfo(symbol) {
   const groupValue = GROUPING === "industry" ? entry.industry : entry.sector;
   return {
     group: groupValue || "Unknown",
-    name: entry.name || "",
+    name: entry.name || nameMap[symbol] || "",
     sector: entry.sector || "",
     industry: entry.industry || ""
   };
@@ -86,7 +150,7 @@ function buildGroupData(row) {
   LIST_COLUMNS.forEach(col => {
     const list = row.lists?.[col.key] || [];
     list.forEach(rawItem => {
-      const item = normalizeItem(rawItem);
+      const item = normalizeItem(rawItem, row.date, col.key);
       if (!item.symbol) return;
       const meta = getGroupInfo(item.symbol);
       const groupKey = meta.group;
@@ -306,18 +370,25 @@ function populateDates() {
 }
 
 async function loadData() {
-  const [breadthRes, sectorRes] = await Promise.allSettled([
+  const [breadthRes, sectorRes, metricsRes] = await Promise.allSettled([
     fetch("../../data/breadth-history.json", { cache: "no-store" }),
-    fetch("../../data/sector-map.json", { cache: "no-store" })
+    fetch("../../data/sector-map.json", { cache: "no-store" }),
+    fetch("../../data/breadth-metrics.json", { cache: "no-store" })
   ]);
 
   if (breadthRes.status === "fulfilled" && breadthRes.value.ok) {
     const json = await breadthRes.value.json();
     breadthRows = json.rows || [];
+    nameMap = buildNameMap(json.universe?.symbols || []);
   }
 
   if (sectorRes.status === "fulfilled" && sectorRes.value.ok) {
     sectorMap = await sectorRes.value.json();
+  }
+
+  if (metricsRes.status === "fulfilled" && metricsRes.value.ok) {
+    const metricsJson = await metricsRes.value.json();
+    metricsLookup = buildMetricsLookup(metricsJson.rows || []);
   }
 
   renderHeader();
