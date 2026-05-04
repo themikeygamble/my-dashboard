@@ -29,17 +29,28 @@ let metricsLookup = new Map();
 let selectedYear = "2026";
 
 async function loadData() {
-  const [breadthRes, sectorRes, metricsRes] = await Promise.allSettled([
+  const [breadthRes, sectorRes, metricsRes, universeRes] = await Promise.allSettled([
     fetch("../data/breadth-history.json", { cache: "no-store" }),
     fetch("../data/sector-map.json", { cache: "no-store" }),
-    fetch("../data/breadth-metrics.json", { cache: "no-store" })
+    fetch("../data/breadth-metrics.json", { cache: "no-store" }),
+    fetch("../data/breadth-universe.json", { cache: "no-store" })
   ]);
+
+  let universeEntries = [];
+  if (universeRes.status === "fulfilled" && universeRes.value.ok) {
+    const universeJson = await universeRes.value.json();
+    universeEntries = universeJson.symbols || universeJson.universe?.symbols || [];
+  }
 
   if (breadthRes.status === "fulfilled" && breadthRes.value.ok) {
     const json = await breadthRes.value.json();
     breadthData = json.rows || [];
-    nameMap = buildNameMap(json.universe?.symbols || []);
+    if (!universeEntries.length) {
+      universeEntries = json.universe?.symbols || [];
+    }
   }
+
+  nameMap = universeEntries.length ? buildNameMap(universeEntries) : {};
 
   if (sectorRes.status === "fulfilled" && sectorRes.value.ok) {
     sectorMap = await sectorRes.value.json();

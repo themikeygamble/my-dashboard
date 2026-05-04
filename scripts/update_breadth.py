@@ -12,6 +12,7 @@ NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.tx
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"
 OUTPUT_PATH = "data/breadth-history.json"
 METRICS_OUTPUT_PATH = "data/breadth-metrics.json"
+UNIVERSE_OUTPUT_PATH = "data/breadth-universe.json"
 
 INDICATOR_BUFFER_DAYS = 120
 PRICE_BATCH_SIZE = 120
@@ -694,6 +695,16 @@ def main():
     if not stock_df.empty:
         qualified_symbols = sorted(stock_df["symbol"].dropna().unique().tolist())
     universe_entries = build_universe_entries(qualified_symbols, name_map, sector_map)
+    universe_payload = {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "count": len(universe_entries),
+        "symbols": universe_entries
+    }
+
+    os.makedirs(os.path.dirname(UNIVERSE_OUTPUT_PATH), exist_ok=True)
+    with open(UNIVERSE_OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(universe_payload, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"Wrote breadth universe. Total symbols: {len(universe_entries)}")
 
     print("Downloading Nasdaq Composite...")
     ixic_df = download_nasdaq_composite(start_str, end_str)
